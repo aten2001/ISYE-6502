@@ -1,0 +1,188 @@
+---
+title: "ISYE 6501 Homework 1"
+author: "Mitchell Matsuura"
+date: "January 16, 2019"
+output:
+  word_document: default
+  pdf_document: default
+  html_document: default
+---
+
+#Question 2.1  
+An important business question for insurance companies 
+insuring bodily injury claims is whether a claim will likely increase in cost more than expected by say $100,000 since the first month after the accident.  The economic benefit of being able to systematically determine these high cost claims right after the first month is that companies can allocate extra resources to these types of claims and use less resources for less costly claims.  As you can imagine this just boils down to a resource allocation problem that can also affect claim outcomes, assuming that the company treats all open claims at the end of the first month pretty uniformly.
+
+Common predictors used to model the jump in claim cost are types of body parts injured (Shoulder, knee, back, hand, head, etc.), age of the claimant, cause of the accident (motor vehicle, slip or fall, falling object, etc), how long it took to first report the claim, and the nature of the type of injury (fracture, laceration, concussion, sprain or strain, etc).  
+
+#Question2.2
+Use caret package in r to run repeated cross-validation to determine the optimal value of C
+Note that I will tell caret to run the ksvm function from the kernlab package and kknn function from the kknn package in the method argument.
+
+```{r}
+library(caret)
+```
+read in credit card data
+```{r}
+credit<-read.table("https://prod-edxapp.edx-cdn.org/assets/courseware/v1/e39a3df780dacd5503df6a8322d72cd2/asset-v1:GTx+ISYE6501x+1T2019+type@asset+block/credit_card_data-headers.txt", header=TRUE)
+```
+Examine the structure of the data frame
+Reshuffle the data table but first set a seed for reproducability
+Then use head function to see that the order has changed
+```{r}
+str(credit)
+head(credit)
+set.seed(1)
+credit2<-credit[sample(1:nrow(credit)),]
+head(credit2)
+```
+Use summary() to check for any NA values
+```{r}
+summary(credit2)
+```
+No NAs by the way
+
+Create 10 folds of the training set 3 times to do repeated 10-fold cross validation
+```{r}
+credit2$R1<-as.factor(credit2$R1)
+sample(1:nrow(credit2),1)
+set.seed(151)
+cvfolds<-createMultiFolds(credit2$R1, k=10, times = 3)
+control<-trainControl(method = "repeatedcv", number = 10, repeats = 3, 
+												 index = cvfolds)
+```	
+Set up the vector of C hyperparameters for caret to validate
+```{r}
+svmgrid<-expand.grid(C=3^c(-5,-4,-3,-2,-1,0,1,2,3,4))
+```
+Use multicores (total of 5) to speed up computations CHECK HOW MUCH CPU (VIRTUAL) CORES YOU HAVE BEFORE RUNNING!!!
+```{r}
+library(doParallel)
+cl<-makePSOCKcluster(5)
+registerDoParallel(cl,cores = 5)
+```
+
+Preprocess the training data using center and scaling in the Preprocess option in the train function from caret
+Select "svmLinear" as method to run a linear kernel from Kernlab package
+```{r}
+start.time<-Sys.time()
+set.seed(151)
+svm1<-train(R1~.,
+							data = credit2, 
+							method='svmLinear',
+							preProc=c("center","scale"),
+							tuneGrid=svmgrid,
+							verbose = FALSE,
+							trControl=control)
+end.time<-Sys.time()
+end.time-start.time
+stopCluster(cl)
+svm1
+```	
+	
+Try a nonlinear kernel like a radial basis one.  Need to first pass new vector of hyperparameters since the radial basis has a new parameter to train sigma.  It controls the nonlinearity I believe.
+```{r}
+svmgrid2<-expand.grid(C=3^c(-5,-4,-3,-2,-1,0,1,2,3,4),sigma=10^-(1:4))
+cl<-makePSOCKcluster(5)
+registerDoParallel(cl,cores = 5)
+start.time<-Sys.time()
+set.seed(151)
+svm2<-train(R1~.,
+							data = credit2, 
+							method='svmRadial',
+							preProc=c("center","scale"),
+							tuneGrid=svmgrid2,
+							verbose = FALSE,
+							trControl=control)
+end.time<-Sys.time()
+end.time-start.time
+stopCluster(cl)
+svm2
+```
+ 
+
+Turns out the linear classifier seperates just as good as the nonlinear one since accuracy is 0.8639083 for both classifiers during cross validation.  
+
+optimal linear kernel result: C = 0.004115226  Accuracy = 0.8638627    
+optimal radial basis kernel  result: sigma = 0.001 and C = 1 Accuracy = 0.8638627  
+
+I also notice that the selected sigma is quite small, 0.001, indicating cross validation selected a more linear decision boundary.  I am also glad to see that C is not too large since large C tends to overfit the data it’s trained on.
+
+Although accuracy is the same, I would select the linear kernel over the radial basis one since it is the simplier model and often the simplier model tends not to overfit the data it’s trained on.
+
+
+showing the performance of svm classifier on the entire dataset using the confusionMatrix function
+```{r}
+svm1whole<-as.factor(predict(svm1,newdata=credit2))
+wholeresponse<-as.factor(credit2$R1)
+confusionMatrix(svm1whole,wholeresponse)
+```
+Accuracy is exactly the same as average accuracy from cross validation surprisingly.
+
+Get the the coefficients from the best linear classifier
+```{r}
+coeffs <-svm1$finalModel
+models <- colSums(coeffs@xmatrix[[1]] * coeffs@coef[[1]])
+as.data.frame(models)
+```
+We see that 4 of the 10 predictors have coefficients close to 0 and probably could be dropped from the model (A1, A2, A3, A12). 
+
+We can try retraining the model without these variables and see if performance changes.
+```{r}
+cl<-makePSOCKcluster(5)
+registerDoParallel(cl,cores = 5)
+start.time<-Sys.time()
+set.seed(151)
+svm3<-train(R1~A8+A9+A10+A11+A14+A15,
+							data = credit2, 
+							method='svmLinear',
+							preProc=c("center","scale"),
+							tuneGrid=svmgrid,
+							verbose = FALSE,
+							trControl=control)
+end.time<-Sys.time()
+end.time-start.time
+stopCluster(cl)
+svm3
+```
+There is no performance change after removing the non-informative predictors with near zero coefficients.  
+```{r}
+svm3whole<-as.factor(predict(svm3,newdata=credit2))
+confusionMatrix(svm3whole,wholeresponse)
+```
+Train a k-nearest neighbors classifier using caret and kknn with the same data sets.  Here I am varying both max k and the Minkowski distance
+```{r}
+kkngrid<-expand.grid(kmax=c(2*(1:7)+1,4*(4:10)+1,6*(7:10)+1),distance = 2, kernel = "optimal")
+```
+
+Preprocess the training data using center and scaling in the Preprocess option in the train function from caret
+Select "kknn" as method to run kknn function from kknn package
+```{r}
+library(kknn)
+cl<-makePSOCKcluster(5)
+registerDoParallel(cl,cores = 5)
+start.time<-Sys.time()
+set.seed(151)
+knn1<-train(R1~.,
+							data = credit2, 
+							method='kknn',
+							preProc=c("center","scale"),
+							tuneGrid=kkngrid,
+							verbose = FALSE,
+							trControl=control)
+end.time<-Sys.time()
+end.time-start.time
+stopCluster(cl)
+knn1
+```	
+Cross validation indicates optimal k = 5 and Minkowski distance = 2.
+
+showing the performance of k-nearest neighbors classifier with max k = 5 and Minkowski distance = 2 on the entire dataset (see Accuracy metric)
+```{r}
+knnwhole<-as.factor(predict(knn1,newdata=credit2))
+confusionMatrix(knnwhole,wholeresponse)
+```
+Accuracy is much higher on the entire data set predictions instead of the cross validated accuracy since our selected model with k =5 and distance = 2 is trained on the entire data set before predictions are made on the same (entire) data set.  Caret’s train function already takes care of that after finding the optimal parameters.
+
+It is hard to say without splitting the data in to a train and holdout set, which model will generalize new data better.  Based on cross-validation I would pick the support vector model since cross validation is our best indication of out-of-sample performance before actually making predictions on a holdout test set.  I would try not to rely on the performance metric based on the data we trained the model on.  Cross validation is the better alternative.
+
+
