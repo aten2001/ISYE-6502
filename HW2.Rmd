@@ -1,0 +1,656 @@
+---
+title: "ISYE 6501 Homework 2"
+author: "Mitchell Matsuura"
+date: "January 23, 2019"
+output:
+  word_document: default
+  pdf_document: default
+  html_document: default
+---
+#Question 3.1
+```{r}
+library(caret)
+```
+read in credit card data
+```{r}
+credit<-read.table("https://prod-edxapp.edx-cdn.org/assets/courseware/v1/e39a3df780dacd5503df6a8322d72cd2/asset-v1:GTx+ISYE6501x+1T2019+type@asset+block/credit_card_data-headers.txt", header=TRUE)
+```
+Examine the structure of the data frame
+Reshuffle the data table but first set a seed for reproducability
+Then use head function to see that the order has changed
+```{r}
+str(credit)
+head(credit)
+set.seed(1)
+credit2<-credit[sample(1:nrow(credit)),]
+head(credit2)
+```
+Use summary() to check for any NA values
+```{r}
+summary(credit2)
+```
+No NAs by the way
+
+Check to see what proportion of the responses are 0s and 1s
+```{r}
+prop.table(table(credit2$R1))
+```
+
+Partion the data into a 70% training and 30% test set. Cross validation will be done on the training set for Knn
+```{r}
+credit2$R1<-as.factor(credit2$R1)
+sample(1:nrow(credit2),1)
+set.seed(372)
+trainIndex <- createDataPartition(credit2$R1, p = .7, list=FALSE, times = 1)
+train<-credit2[trainIndex,]
+str(train)#confirm number of records is 70% of entire data set
+```
+Check to see if the proportion of 0s and 1s in the training set match our earlier check on the entire data set
+```{r}
+prop.table(table(train$R1))
+```
+
+Create 10 folds of the training set 3 times to do repeated 10-fold cross validation
+```{r}
+sample(1:nrow(train),1)
+set.seed(253)
+cvfolds<-createMultiFolds(train$R1, k=10, times = 3)
+control<-trainControl(method = "repeatedcv", number = 10, repeats = 3, 
+												 index = cvfolds)
+```	
+
+Train a k-nearest neighbors classifier using caret and kknn with the same data sets.  Here I am varying both max k and the Minkowski distance
+```{r}
+kkngrid<-expand.grid(kmax=c(2*(1:7)+1,4*(4:10)+1,6*(7:20)+1),distance = 2, kernel = "optimal")
+```
+
+Preprocess the training data using center and scaling in the Preprocess option in the train function from caret
+Select "kknn" as method to run kknn function from kknn package
+```{r}
+library(kknn)
+library(doParallel)
+cl<-makePSOCKcluster(5)
+registerDoParallel(cl,cores = 5)
+start.time<-Sys.time()
+set.seed(253)
+knn1<-train(R1~.,
+							data = train, 
+							method='kknn',
+							preProc=c("center","scale"),
+							tuneGrid=kkngrid,
+							verbose = FALSE,
+							trControl=control)
+end.time<-Sys.time()
+end.time-start.time
+stopCluster(cl)
+knn1
+```	
+Cross validation indicates optimal k = 49 for a Minkowski distance = 2.  Cross validation performance for this "best"" set of parameters is represented here by the average accuracy of 0.8432987.  It is interesting that the average accuracy does not change for k above 80.
+
+showing the performance of k-nearest neighbors classifier with max k = 49 and Minkowski distance = 2 on the test dataset (see Accuracy metric)
+```{r}
+test<-credit2[-trainIndex,]
+testresponse<-as.factor(test$R1)
+knntest<-as.factor(predict(knn1,newdata=test))
+confusionMatrix(knntest,testresponse)
+```
+Accuracy is lower on the test set since the test set has different random error than the training set we built the model on and we might have overfit to that random error in the training set just a bit.
+
+Train a svm classifier using caret and ksvm with the same data sets.
+```{r}
+svmgrid<-expand.grid(C=2^c(-6,-5,-4,-3,-2,-1,0,1,2,3,4,5,6,7),sigma=10^-(1:4))
+```
+
+Preprocess the training data using center and scaling in the Preprocess option in the train function from caret
+Select "svmRadial" as method to run ksvm function from kernlab package with radial basis kernel
+```{r}
+library(doParallel)
+cl<-makePSOCKcluster(5)
+registerDoParallel(cl,cores = 5)
+start.time<-Sys.time()
+set.seed(253)
+svm1<-train(R1~.,
+							data = train, 
+							method='svmRadial',
+							preProc=c("center","scale"),
+							tuneGrid=svmgrid,
+							verbose = FALSE,
+							trControl=control)
+end.time<-Sys.time()
+end.time-start.time
+stopCluster(cl)
+svm1
+```	
+10-fold cross validation has indicated the optimal parameters are sigma = 0.001 and C = 2 for the svm algorithm with radial basis kernel.  Cross Validated performance is indicated by an average accuracy of 0.8561832.
+
+Try using a linear kernel instead and compare cross validated performance
+```{r}
+svmgrid2<-expand.grid(C=2^c(-6,-5,-4,-3,-2,-1,0,1,2,3,4,5,6,7))
+cl<-makePSOCKcluster(5)
+registerDoParallel(cl,cores = 5)
+start.time<-Sys.time()
+set.seed(253)
+svm2<-train(R1~.,
+							data = train, 
+							method='svmLinear',
+							preProc=c("center","scale"),
+							tuneGrid=svmgrid2,
+							verbose = FALSE,
+							trControl=control)
+end.time<-Sys.time()
+end.time-start.time
+stopCluster(cl)
+svm2
+```
+The nonlinear kernel performed better during cross validation.  Not sure why accuracy is the same for all cost values for the linear kernel.
+```{r}
+svmtest<-as.factor(predict(svm1,newdata=test))
+confusionMatrix(svmtest,testresponse)
+```
+Accuracy has improved on the test set to 0.8821 probably since cross validation this time has prevented us from overtraining on the random error present in the training data.
+
+If we were to compare the knn and svm models built here, we could use the cross validated result only to select the better model since we used the same folds of data.  In this case it would be the svm with radial basis kernel and we can see that selection reaffirmed with our out-of-sample test set performance.
+
+
+###3.1 (b)
+create the training, validation, and test set
+```{r}
+sample(1:nrow(credit2),1)
+set.seed(212)
+trainvalidIndex <- createDataPartition(credit2$R1, p = .75, list=FALSE, times = 1)
+trainvalid<-credit2[trainvalidIndex,]
+str(trainvalid)#confirm number of records is 75% of entire data set
+
+sample(1:nrow(trainvalid),1)
+set.seed(45)
+trainIndex2<-createDataPartition(trainvalid$R1, p = 2/3, list=FALSE, times = 1)#indexes the training data set
+train2<-trainvalid[trainIndex2,]#creates the training data set
+str(train2)#confirm number of records is 2/3 of training/validation data set or 50% of the entire data set
+
+valid<-trainvalid[-trainIndex2,]#creates the validation data set
+test2<-credit2[-trainvalidIndex,]#creates the test data set
+str(valid)#confirm this is only 25% of the entire data set
+str(test2)#confirm this is only 25% of the entire data set
+```
+Procedure:
+Proceed with finding a good k value for knn using only the build set then test each k's performance on the validation set.  Find which k performed the best on validation data and that will be our optimal k.  Then train the optimal model on the entire training and validation data and test the final model on the test set to get out-of-sample test performance.
+
+```{r}
+set.seed(10)
+cl<-makePSOCKcluster(5)
+registerDoParallel(cl,cores = 5)
+for (k in 1:25){
+trained<-train.kknn(as.factor(R1)~.,
+           train2,
+           kmax = k,
+           kernel =  c("rectangular", "triangular", "epanechnikov", "gaussian", "rank", "optimal"),
+           scale = TRUE)
+print(trained$MISCLASS)}
+stopCluster(cl)
+
+#optimal k = 7 and optimal kernel is triangular
+set.seed(10)
+  prediction<-round(fitted.values(kknn(R1~.,
+       k = 7,
+       distance = 2,
+       kernel = "triangular",
+       scale=TRUE,
+       train = train2,
+       test = valid)))
+knnvalid<-as.factor(prediction)
+validresponse<-as.factor(valid$R1)
+confusionMatrix(knnvalid,validresponse)
+```
+predict on the test set using model built on the combined training and validation sets.  Ideally you want to train the model on as much data as possible after you performed parameter selection on a smaller subset of your data.  We don't want to waste our validation set.
+```{r}
+set.seed(10)
+prediction2<-round(fitted.values(kknn(R1~.,
+       k = 7,
+       distance = 2,
+       kernel = "triangular",
+       scale=TRUE,
+       train = trainvalid,
+       test = test2)))
+knntest2<-as.factor(prediction2)
+testresponse2<-as.factor(test2$R1)
+confusionMatrix(knntest2,testresponse2)
+```
+Follow the same process but using the svm algorithm
+```{r}
+library(kernlab)
+set.seed(10)
+cl<-makePSOCKcluster(5)
+registerDoParallel(cl,cores = 5)
+for (c in 2^c(-6,-5,-4,-3,-2,-1,0,1,2,3,4,5,6,7)){
+trainedsvm<-ksvm(as.factor(R1)~.,
+           train2,
+           C = c,
+           kernel = "rbfdot",
+           scale = TRUE,
+           cross = 10,
+           type = 'C-svc',
+           kpar = "automatic")#using automatic sigma for simplicity
+print(trainedsvm)}
+stopCluster(cl)
+```
+###Best SVM model according to cross validation error and secondly training error
+Support Vector Machine object of class "ksvm" 
+
+SV type: C-svc  (classification) 
+ parameter : cost C = 8 
+
+Gaussian Radial Basis kernel function. 
+ Hyperparameter : sigma =  0.0982634891761187 
+
+Number of Support Vectors : 134 
+
+Objective Function Value : -504.5219 
+Training error : 0.064024 
+Cross validation error : 0.143182 
+
+The best cross validated performance on the training set was an svm with a linear kernel and cost parameter of 8 since its error is 0.143182 and accuracy is 0.856818.
+
+Let's see how this svm model performs on the validation set.
+```{r}
+validdsvm<-ksvm(as.factor(R1)~.,
+           train2,
+           C = 8,
+           kernel = 'rbfdot',
+           scale = TRUE,
+           type = 'C-svc',
+           kpar = list(0.0982634891761187))
+svmvalid<-as.factor(predict(validdsvm,newdata=valid))
+confusionMatrix(svmvalid,validresponse)
+```
+At this point we can compare validation set performance of the 2 models knn and svm.  Following our comparison we can select which model we want to test on out-of-sample data.  The svm has a validation set performance of 0.8282 accuracy and the knn had an accuracy of 0.8098 so I would select the svm model.
+
+Because of the tie lets measure performance on the test set for our knn model
+```{r}
+svmtrainvalid<-ksvm(as.factor(R1)~.,
+           trainvalid,
+          C = 8,
+           kernel = 'rbfdot',
+           scale = TRUE,
+           type = 'C-svc',
+           kpar = list(0.0982634891761187))
+svmtest2<-as.factor(predict(svmtrainvalid,newdata=test2))
+confusionMatrix(svmtest2,testresponse2)
+```
+Here we see that accuracy has improved on the test set data since we did a good job of training the model on a subset of the data using cross validation on the training set to select the optimal parameters. The svm outperformed the knn model on the same test set since svm accuracy is 0.8344 and knn accuracy is 0.8221.
+
+We can also compare the results of doing cross validation to doing training, validation, and test sets.  Performing cross validation we would have not selected the knn model since svm cross validation performance was better so using either data splitting approaches would have resulted in selecting the svm model. However, the average cross validation performance and test set performance of svm1 is better than the validation and test set performance of traineddsvm model so I would trust the cross validation data splitting procedure/model more.
+
+###Question 4.1
+In the insurance industry clustering is used for determining which types of policy holders are more of a risk than others.  It is important to see if risks can be segregated according to the following characteristics so we can correctly price these risks:
+
+Predictors
+1)  number of years renewed
+2)  average 3 years total premium
+3)  average 3 year ratio of total incurred losses to total premium
+4)  NAICS industry group classification
+5)  number of policies placed with us
+
+###Question 4.2
+call on the iris data set in r don't include the response column #4 since we are doing unsupervised learning
+```{r}
+iris<-iris
+str(iris)
+```
+shuffle the data so the rows are random
+```{r}
+head(iris)
+set.seed(1)
+iris2<-iris[sample(1:nrow(iris)),]
+head(iris2)
+```
+
+```{r}
+library(tidyverse)
+library(cluster)
+library(factoextra)
+sample(1:nrow(iris2),1)
+set.seed(89)
+k1<-kmeans(iris2[,1:4], 2, iter.max = 25, nstart = 25,
+       algorithm = c("Hartigan-Wong", "Lloyd", "Forgy",
+                     "MacQueen"), trace=FALSE)
+
+set.seed(89)
+k2<-kmeans(iris2[,1:4], 3, iter.max = 25, nstart = 25,
+       algorithm = c("Hartigan-Wong", "Lloyd", "Forgy",
+                     "MacQueen"), trace=FALSE)
+
+set.seed(89)
+k3<-kmeans(iris2[,1:4], 4, iter.max = 25, nstart = 25,
+       algorithm = c("Hartigan-Wong", "Lloyd", "Forgy",
+                     "MacQueen"), trace=FALSE)
+
+set.seed(89)
+k4<-kmeans(iris2[,1:4], 5, iter.max = 25, nstart = 25,
+       algorithm = c("Hartigan-Wong", "Lloyd", "Forgy",
+                     "MacQueen"), trace=FALSE)
+
+set.seed(89)
+k5<-kmeans(iris2[,1:4], 6, iter.max = 25, nstart = 25,
+       algorithm = c("Hartigan-Wong", "Lloyd", "Forgy",
+                     "MacQueen"), trace=FALSE)
+
+set.seed(89)
+k6<-kmeans(iris2[,1:4], 7, iter.max = 25, nstart = 25,
+       algorithm = c("Hartigan-Wong", "Lloyd", "Forgy",
+                     "MacQueen"), trace=FALSE)
+k1$tot.withinss
+k2$tot.withinss
+k3$tot.withinss
+k4$tot.withinss
+k5$tot.withinss
+k6$tot.withinss
+```
+Performance based on Within cluster sum of squares by cluster is the best for k = 7 since Within cluster sum of squares by cluster is its lowest at 34.29823.
+Take an algorithm approach to select iter.max using elbow method
+```{r}
+
+set.seed(89)
+# function to compute total within-cluster sum of square 
+wss <- function(k) {
+  kmeans(iris2[,1:4], k, nstart = 25 )$tot.withinss
+}
+
+# Compute and plot wss for k = 1 to k = 15
+k.values <- 1:15
+
+# extract wss for 2-15 clusters
+wss_values <- map_dbl(k.values, wss)
+
+plot(k.values, wss_values,
+       type="b", pch = 19, frame = FALSE, 
+       xlab="Number of clusters K",
+       ylab="Total within-clusters sum of squares")
+```
+elbow method confirms k is the best at 2
+
+Show clustering performance visually
+```{r}
+graph1 <- fviz_cluster(k1, geom = "point", data = iris[,1:4]) + ggtitle("k = 2")
+graph2 <- fviz_cluster(k2, geom = "point",  data = iris[,1:4]) + ggtitle("k = 3")
+graph3 <- fviz_cluster(k3, geom = "point",  data = iris[,1:4]) + ggtitle("k = 4")
+graph4 <- fviz_cluster(k4, geom = "point",  data = iris[,1:4]) + ggtitle("k = 5")
+graph5 <- fviz_cluster(k5, geom = "point",  data = iris[,1:4]) + ggtitle("k = 6")
+graph6 <- fviz_cluster(k6, geom = "point",  data = iris[,1:4]) + ggtitle("k = 7")
+library(gridExtra)
+grid.arrange(graph1, graph2, graph3, graph4, graph5,graph6, nrow = 2)
+```
+performance does not so good according to these graphs so try to do better by reducing predictors
+```{r}
+iris3<-iris2[,c(1,2)]
+str(iris3)
+set.seed(89)
+k1a<-kmeans(iris3, 2, iter.max = 25, nstart = 25,
+       algorithm = c("Hartigan-Wong", "Lloyd", "Forgy",
+                     "MacQueen"), trace=FALSE)
+
+set.seed(89)
+k2a<-kmeans(iris3, 3, iter.max = 25, nstart = 25,
+       algorithm = c("Hartigan-Wong", "Lloyd", "Forgy",
+                     "MacQueen"), trace=FALSE)
+
+set.seed(89)
+k3a<-kmeans(iris3, 4, iter.max = 25, nstart = 25,
+       algorithm = c("Hartigan-Wong", "Lloyd", "Forgy",
+                     "MacQueen"), trace=FALSE)
+
+set.seed(89)
+k4a<-kmeans(iris3, 5, iter.max = 25, nstart = 25,
+       algorithm = c("Hartigan-Wong", "Lloyd", "Forgy",
+                     "MacQueen"), trace=FALSE)
+
+set.seed(89)
+k5a<-kmeans(iris3, 6, iter.max = 25, nstart = 25,
+       algorithm = c("Hartigan-Wong", "Lloyd", "Forgy",
+                     "MacQueen"), trace=FALSE)
+
+set.seed(89)
+k6a<-kmeans(iris3, 7, iter.max = 25, nstart = 25,
+       algorithm = c("Hartigan-Wong", "Lloyd", "Forgy",
+                     "MacQueen"), trace=FALSE)
+k1a$tot.withinss
+k2a$tot.withinss
+k3a$tot.withinss
+k4a$tot.withinss
+k5a$tot.withinss
+k6a$tot.withinss
+
+```
+the best performance for 2 predictors (Sepal.Length,Sepal.Width) and for k = 7 since Within cluster sum of squares by cluster is its lowest at 14.75648.
+
+Try a different pair of predictors (Sepal.Length, Petal.Length)
+```{r}
+iris4<-iris2[,c(1,3)]
+str(iris4)
+set.seed(89)
+k1b<-kmeans(iris4, 2, iter.max = 25, nstart = 25,
+       algorithm = c("Hartigan-Wong", "Lloyd", "Forgy",
+                     "MacQueen"), trace=FALSE)
+
+set.seed(89)
+k2b<-kmeans(iris4, 3, iter.max = 25, nstart = 25,
+       algorithm = c("Hartigan-Wong", "Lloyd", "Forgy",
+                     "MacQueen"), trace=FALSE)
+
+set.seed(89)
+k3b<-kmeans(iris4, 4, iter.max = 25, nstart = 25,
+       algorithm = c("Hartigan-Wong", "Lloyd", "Forgy",
+                     "MacQueen"), trace=FALSE)
+
+set.seed(89)
+k4b<-kmeans(iris4, 5, iter.max = 25, nstart = 25,
+       algorithm = c("Hartigan-Wong", "Lloyd", "Forgy",
+                     "MacQueen"), trace=FALSE)
+
+set.seed(89)
+k5b<-kmeans(iris4, 6, iter.max = 25, nstart = 25,
+       algorithm = c("Hartigan-Wong", "Lloyd", "Forgy",
+                     "MacQueen"), trace=FALSE)
+
+set.seed(89)
+k6b<-kmeans(iris4, 7, iter.max = 25, nstart = 25,
+       algorithm = c("Hartigan-Wong", "Lloyd", "Forgy",
+                     "MacQueen"), trace=FALSE)
+k1b$tot.withinss
+k2b$tot.withinss
+k3b$tot.withinss
+k4b$tot.withinss
+k5b$tot.withinss
+k6b$tot.withinss
+```
+no improvement using this pair of predictors
+
+Try a different pair of predictors (Sepal.Length, Petal.Width)
+```{r}
+iris5<-iris2[,c(1,4)]
+str(iris5)
+set.seed(89)
+k1c<-kmeans(iris5, 2, iter.max = 25, nstart = 25,
+       algorithm = c("Hartigan-Wong", "Lloyd", "Forgy",
+                     "MacQueen"), trace=FALSE)
+
+set.seed(89)
+k2c<-kmeans(iris5, 3, iter.max = 25, nstart = 25,
+       algorithm = c("Hartigan-Wong", "Lloyd", "Forgy",
+                     "MacQueen"), trace=FALSE)
+
+set.seed(89)
+k3c<-kmeans(iris5, 4, iter.max = 25, nstart = 25,
+       algorithm = c("Hartigan-Wong", "Lloyd", "Forgy",
+                     "MacQueen"), trace=FALSE)
+
+set.seed(89)
+k4c<-kmeans(iris5, 5, iter.max = 25, nstart = 25,
+       algorithm = c("Hartigan-Wong", "Lloyd", "Forgy",
+                     "MacQueen"), trace=FALSE)
+
+set.seed(89)
+k5c<-kmeans(iris5, 6, iter.max = 25, nstart = 25,
+       algorithm = c("Hartigan-Wong", "Lloyd", "Forgy",
+                     "MacQueen"), trace=FALSE)
+
+set.seed(89)
+k6c<-kmeans(iris5, 7, iter.max = 25, nstart = 25,
+       algorithm = c("Hartigan-Wong", "Lloyd", "Forgy",
+                     "MacQueen"), trace=FALSE)
+k1c$tot.withinss
+k2c$tot.withinss
+k3c$tot.withinss
+k4c$tot.withinss
+k5c$tot.withinss
+k6c$tot.withinss
+```
+Performance is not bad for this predictor pair
+
+Try a different pair of predictors (Sepal.Width, Petal.Length)
+```{r}
+iris6<-iris2[,c(2,3)]
+str(iris6)
+set.seed(89)
+k1d<-kmeans(iris6, 2, iter.max = 25, nstart = 25,
+       algorithm = c("Hartigan-Wong", "Lloyd", "Forgy",
+                     "MacQueen"), trace=FALSE)
+
+set.seed(89)
+k2d<-kmeans(iris6, 3, iter.max = 25, nstart = 25,
+       algorithm = c("Hartigan-Wong", "Lloyd", "Forgy",
+                     "MacQueen"), trace=FALSE)
+
+set.seed(89)
+k3d<-kmeans(iris6, 4, iter.max = 25, nstart = 25,
+       algorithm = c("Hartigan-Wong", "Lloyd", "Forgy",
+                     "MacQueen"), trace=FALSE)
+
+set.seed(89)
+k4d<-kmeans(iris6, 5, iter.max = 25, nstart = 25,
+       algorithm = c("Hartigan-Wong", "Lloyd", "Forgy",
+                     "MacQueen"), trace=FALSE)
+
+set.seed(89)
+k5d<-kmeans(iris6, 6, iter.max = 25, nstart = 25,
+       algorithm = c("Hartigan-Wong", "Lloyd", "Forgy",
+                     "MacQueen"), trace=FALSE)
+
+set.seed(89)
+k6d<-kmeans(iris6, 7, iter.max = 25, nstart = 25,
+       algorithm = c("Hartigan-Wong", "Lloyd", "Forgy",
+                     "MacQueen"), trace=FALSE)
+k1d$tot.withinss
+k2d$tot.withinss
+k3d$tot.withinss
+k4d$tot.withinss
+k5d$tot.withinss
+k6d$tot.withinss
+```
+No improvement with this set of predictors
+
+Try a different pair of predictors (Sepal.Width, Petal.Width)
+```{r}
+iris7<-iris2[,c(2,4)]
+str(iris7)
+set.seed(89)
+k1e<-kmeans(iris7, 2, iter.max = 25, nstart = 25,
+       algorithm = c("Hartigan-Wong", "Lloyd", "Forgy",
+                     "MacQueen"), trace=FALSE)
+
+set.seed(89)
+k2e<-kmeans(iris7, 3, iter.max = 25, nstart = 25,
+       algorithm = c("Hartigan-Wong", "Lloyd", "Forgy",
+                     "MacQueen"), trace=FALSE)
+
+set.seed(89)
+k3e<-kmeans(iris7, 4, iter.max = 25, nstart = 25,
+       algorithm = c("Hartigan-Wong", "Lloyd", "Forgy",
+                     "MacQueen"), trace=FALSE)
+
+set.seed(89)
+k4e<-kmeans(iris7, 5, iter.max = 25, nstart = 25,
+       algorithm = c("Hartigan-Wong", "Lloyd", "Forgy",
+                     "MacQueen"), trace=FALSE)
+
+set.seed(89)
+k5e<-kmeans(iris7, 6, iter.max = 25, nstart = 25,
+       algorithm = c("Hartigan-Wong", "Lloyd", "Forgy",
+                     "MacQueen"), trace=FALSE)
+
+set.seed(89)
+k6e<-kmeans(iris7, 7, iter.max = 25, nstart = 25,
+       algorithm = c("Hartigan-Wong", "Lloyd", "Forgy",
+                     "MacQueen"), trace=FALSE)
+k1e$tot.withinss
+k2e$tot.withinss
+k3e$tot.withinss
+k4e$tot.withinss
+k5e$tot.withinss
+k6e$tot.withinss
+```
+This predictor pair is best so far since Within cluster sum of squares by cluster is its lowest at  36.409
+
+Try a different pair of predictors (Sepal.Width, Petal.Width)
+```{r}
+iris8<-iris2[,c(3,4)]
+str(iris8)
+set.seed(89)
+k1f<-kmeans(iris8, 2, iter.max = 25, nstart = 25,
+       algorithm = c("Hartigan-Wong", "Lloyd", "Forgy",
+                     "MacQueen"), trace=FALSE)
+
+set.seed(89)
+k2f<-kmeans(iris8, 3, iter.max = 25, nstart = 25,
+       algorithm = c("Hartigan-Wong", "Lloyd", "Forgy",
+                     "MacQueen"), trace=FALSE)
+
+set.seed(89)
+k3f<-kmeans(iris8, 4, iter.max = 25, nstart = 25,
+       algorithm = c("Hartigan-Wong", "Lloyd", "Forgy",
+                     "MacQueen"), trace=FALSE)
+
+set.seed(89)
+k4f<-kmeans(iris8, 5, iter.max = 25, nstart = 25,
+       algorithm = c("Hartigan-Wong", "Lloyd", "Forgy",
+                     "MacQueen"), trace=FALSE)
+
+set.seed(89)
+k5f<-kmeans(iris8, 6, iter.max = 25, nstart = 25,
+       algorithm = c("Hartigan-Wong", "Lloyd", "Forgy",
+                     "MacQueen"), trace=FALSE)
+
+set.seed(89)
+k6f<-kmeans(iris8, 7, iter.max = 25, nstart = 25,
+       algorithm = c("Hartigan-Wong", "Lloyd", "Forgy",
+                     "MacQueen"), trace=FALSE)
+k1f$tot.withinss
+k2f$tot.withinss
+k3f$tot.withinss
+k4f$tot.withinss
+k5f$tot.withinss
+k6f$tot.withinss
+```
+No improvement with this set of predictors
+
+Select k =3 and predictors Sepal.Width and Petal.Width since we are trying to predict 3 classes and k=3 still provided good improvement.
+
+Show clustering performance visually and make prediction using k=3 and Sepal.Width and Petal.Width predictors
+```{r}
+graph1e <- fviz_cluster(k1e, geom = "point", data = iris[,c(2,4)]) + ggtitle("k = 2")
+graph2e <- fviz_cluster(k2e, geom = "point",  data = iris[,c(2,4)]) + ggtitle("k = 3")
+graph3e<- fviz_cluster(k3e, geom = "point",  data = iris[,c(2,4)]) + ggtitle("k = 4")
+graph4e <- fviz_cluster(k4e, geom = "point",  data = iris[,c(2,4)]) + ggtitle("k = 5")
+graph5e <- fviz_cluster(k5e, geom = "point",  data = iris[,c(2,4)]) + ggtitle("k = 6")
+graph6e <- fviz_cluster(k6e, geom = "point",  data = iris[,c(2,4)]) + ggtitle("k = 7")
+library(gridExtra)
+grid.arrange(graph1e, graph2e, graph3e, graph4e, graph5e,graph6e, nrow = 2)
+```
+Predictions using k2e
+```{r}
+prediction<-data.frame(k2e$cluster,as.factor(iris2[,5]))
+prediction
+prediction$k2e.cluster<-as.factor(ifelse(prediction$k2e.cluster==3,"setosa",ifelse(prediction$k2e.cluster==1,"versicolor","virginica")))
+prediction
+confusionMatrix(prediction$k2e.cluster,as.factor(iris2[,5]))
+```
+the classifier did quite well providing an accuracy of 0.9267.
