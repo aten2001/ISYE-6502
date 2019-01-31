@@ -1,0 +1,344 @@
+---
+title: "ISYE 6501 Homework 3"
+author: "Mitchell Matsuura"
+date: "January 29, 2019"
+output:
+  word_document: default
+pdf_document: default
+html_document: default
+---
+###Question 5.1
+  
+read in the crime data set  
+```{r}
+crime<-read.table("https://prod-edxapp.edx-cdn.org/assets/courseware/v1/17b85cea5d0e613bf08025ca2907b62f/asset-v1:GTx+ISYE6501x+1T2019+type@asset+block/uscrime.txt", header=TRUE)
+str(crime)
+summary(crime)
+```
+Use boxplot to see if there is any outliers we saw from the summary function that the max of the Crime variable is 1993 which is about twice the value of the 3rd quarter of the distribution
+
+```{r}
+boxplot(crime$Crime,data = crime)
+```
+here we see 3 points that could be outliers on the high end of the distribution.  Looks like a one sided grubbs test is needed
+
+Use the grubbs function 
+```{r}
+library(outliers)
+grubbs.test(crime$Crime, type = 10, opposite = FALSE, two.sided = FALSE)
+```
+we fail to reject the null hypothesis that 1993 is not an outlier since the p-value associated with G is greater than 0.05.
+```{r}
+grubbs.test(crime$Crime, type = 10, opposite = FALSE, two.sided = TRUE)
+```
+we fail to reject the null hypothesis that 1993 is not an outlier since p-value of 0.1577 is greater than 0.05.
+```{r}
+grubbs.test(crime$Crime, type = 10, opposite = TRUE, two.sided = FALSE)
+```
+we fail to reject the null hypothesis that 342 is not an outlier since p-value is at it's maximum.
+```{r}
+grubbs.test(crime$Crime, type = 10, opposite = TRUE, two.sided = TRUE)
+```
+we reject the null hypothesis that 342 is not an outlier since p-value is much lower than 0.05 and accept the alternative hypothesis that it is an outlier
+```{r}
+grubbs.test(crime$Crime, type = 11, opposite = TRUE, two.sided = TRUE)
+```
+we reject the null hypothesis that 342 and 1993 are not outliers or either 342 or 1993 is an outlier since p-value is much lower than 0.05 and accept the alternative hypothesis that they are outliers.
+
+Lets now remove the row for the Crime variable = 342 and repeat the previous test
+```{r}
+crime2<-crime[-which(crime$Crime == 342),]
+min(crime2$Crime)
+
+grubbs.test(crime2$Crime, type = 11, opposite = TRUE, two.sided = TRUE)
+```
+We see that after removing 342, we still have outliers so Lets now remove the row for the Crime variable = 1993 and repeat the previous test
+```{r}
+crime3<-crime2[-which(crime2$Crime == 1993),]
+max(crime3$Crime)
+
+grubbs.test(crime3$Crime, type = 11, opposite = TRUE, two.sided = TRUE)
+```
+Now after removing both 1993 and 342 we see there is no more outliers after doing these 2 iterations with the two-tailed two opposite outlier grubbs test.  Keep in mind that only 342 is an outlier according to a one outlier two-tailed grubbs test.
+
+Answer: 342 and 1993 are outliers
+
+###Question 6.1
+In my industry the claims dept may want to know if the number of open claims is increasing as soon as possible so that they can make sure they will have enough adjusters to manage these increasing number of claims.  It is important to have an early detection of this.
+
+I imagine a data frame where each row corresponds to the end of week open claims inventory and the columns would represent a calendar year. This representation will allow us to detect a change in direction for each year and compare the avg open inventory year-by-year just as we have done in question 6.2 below.
+
+C and T would be estimated by calculating the standard deviation of a calendar year of open claims on a year designated as a base year for ease of comparison.  The base year can be year shown to have just average claims experience.  We could first use C = 0.5 x std deviation of base year and T = 5 x std deviation of base year and we would adjust T or C as needed based on how CUSUM is performing.
+
+###Question 6.2.1
+read in text file from class website and examine data
+```{r}
+temp<-read.table("https://prod-edxapp.edx-cdn.org/assets/courseware/v1/592f3be3e90d2bdfe6a69f62374a1250/asset-v1:GTx+ISYE6501x+1T2019+type@asset+block/temps.txt",header = TRUE)
+str(temp)
+summary(temp)
+View(temp)
+```
+end rows at Oct-31 for each year 1996-2015
+```{r}
+temp2<-temp[1:123,]
+View(temp2)
+
+```
+Find standard deviation of year 1996
+```{r}
+sd(temp2[,2])
+```
+
+add CUSUM columns for 1996 with C = 4.25 and T = 42.5 since standard deviation is 8.5
+```{r}
+s = list()
+  temp2$s= 0
+  CUSUM<-function(C,T,cl){
+for (j in cl){
+  for (i in 1:nrow(temp2)){
+  #s[i-1,j] = 0
+if (i-1 != 0){
+  
+  s <- max(0,temp2$s[i-1]+(mean(temp2[,j])-temp2[i,j]-C))
+}
+    else{ s<- 0}
+    if(s>=T){s}
+    else{s<-0}
+    
+temp2$s[[i]]<-s
+  }
+  }
+  return(data.frame(temp2[,1],temp2[,j],temp2$s))}
+  CUSUM(C=4.25,T=42.5,cl=2)
+```
+Try T = 12 instead of 15 since Sept 30 should be included.  try year 1996 again
+
+add CUSUM columns for 1996 with C = 4.25 and T = 12
+```{r}
+s = list()
+  temp2$s= 0
+  CUSUM(C=4.25,T=12,cl=2)
+```
+better, now end of summer is Sept 30 for year 1996
+
+add CUSUM columns for 1997 with C = 4.25 and T = 12
+```{r}
+s = list()
+  temp2$s= 0
+ CUSUM(C=4.25,T=12,cl=3)
+```
+End of summer is detected for Sept 27 with C = 4.25 and T =12.  This is in agreement with my expectiation after looking at the data for the year.
+
+add CUSUM columns for 1998 with C = 4.25 and T =12
+```{r}
+s = list()
+  temp2$s= 0
+  CUSUM(C=4.25,T=12,cl=4)
+```
+
+End to summer detected with C =4.25 and T =12 for year 1998 which is a warmer year since it is detected later at Oct 22.  Originally I thought that Sept 29 would be detected as the end of summer, but Oct 22 is a bigger change.
+
+add CUSUM columns for 1999 with C = 4.25 and T = 12
+```{r}
+s = list()
+  temp2$s= 0
+  CUSUM(C=4.25,T=12,cl=5)
+```
+summer end on Oct 13 with C = 4.25 and T = 12.  This is in agreement with my expectations from looking at the data since Oct 13 is the first observation to be this far from the avg temp.
+
+
+add CUSUM columns for 2000 with C = 4.25 and T = 12
+```{r}
+s = list()
+  temp2$s= 0
+  CUSUM(C=4.25,T=12,cl=6)
+```
+
+Summer ends early for year 2000 with C =4.25 and T = 12 since the first big decrease occurs on Sept 6.
+
+add CUSUM columns for 2001 with C =4.25 and T = 12
+```{r}
+s = list()
+  temp2$s= 0
+  CUSUM(C=4.25,T=12,cl=7)
+```
+
+summer ends pretty much according to expectation on Oct 16 for year 2001 with C =4.25 and T = 12.  Try 2002
+
+add CUSUM columns for 2002 with C =4.25 and T = 12
+```{r}
+s = list()
+  temp2$s= 0
+  CUSUM(C=4.25,T=12,cl=8)
+```
+The algorithm performs well with the same parameters C and T for this year, predicting end of summer to what I would expect as the first big decrease from the mean at Oct 9.  Try 2003
+
+add CUSUM columns for 2003 with C = 4.25 and T = 11
+```{r}
+s = list()
+  temp2$s= 0
+ CUSUM(C=4.25,T=11,cl=9)
+```
+
+Summer ends very late in Sept on the 29th.  Based on observing the data I would say Sept 28 or 29th are acceptable answers.  Notice I had to decrease T from 12 to 11 to achieve this.  Try 2004
+
+add CUSUM columns for 2004 with C = 4.25 and T = 12
+```{r}
+s = list()
+  temp2$s= 0
+  CUSUM(C=4.25,T=12,cl=10)
+```
+
+End of summer is detected for C =4.25 and T >=12 at Oct 13.  I would agree with the algorithm based on the data, I don't see a pattern of prolonged decrease in temp.
+
+
+add CUSUM columns for 2005 with C = 4.25 and T = 12
+```{r}
+s = list()
+  temp2$s= 0
+  CUSUM(C=4.25,T=12,cl=11)
+```
+
+Same as the prior year, 2004, the end of summer is not detected till later in the year at Oct 22.  I would agree with the algorithm based on the data, I don't see a pattern of prolonged decrease in temp earlier in the data.
+
+add CUSUM columns for 2006 with C = 4.25 and T = 12
+```{r}
+s = list()
+  temp2$s= 0
+  CUSUM(C=4.25,T=12,cl=12)
+```  
+
+End of summer is detected in the year at OCt 13 since it is the first observation to be that far from the mean.  
+
+add CUSUM columns for 2007 with C = 4.25 and T = 12
+```{r}
+s = list()
+  temp2$s= 0
+ CUSUM(C=4.25,T=12,cl=13)
+```  
+
+End of summer detected for Oct 11 since this is a relatively warm year like the prior 3 years.
+
+
+add CUSUM columns for 2008 with C = 4.25 and T = 12
+```{r}
+s = list()
+  temp2$s= 0
+ CUSUM(C=4.25,T=12,cl=14)
+```  
+End of summer not detected till Oct 19.
+
+add CUSUM columns for 2009 with C = 4.25 and T = 12
+```{r}
+s = list()
+  temp2$s= 0
+  CUSUM(C=4.25,T=12,cl=15)
+```  
+
+End of summer detected at OCt 5 since the observation is the first to be so far from mean.
+
+add CUSUM columns for 2010 with C = 4.25 and T = 12
+```{r}
+s = list()
+temp2$s= 0
+ CUSUM(C=4.25,T=12,cl=16)
+```  
+
+End of summer detected at OCt 3 for this year.  I notice that the mean temp must be higher relative to prior years since the change is detected at a higher temp of 68 degrees.
+
+
+add CUSUM columns for 2011 with C = 4.25 and T = 12
+```{r}
+s = list()
+temp2$s= 0
+ CUSUM(C=4.25,T=12,cl=17)
+```
+
+end of summer is detected early at Sept 7 with parameters C =4.25 and T=12 since the mean temp is high for this year and this is the first observation far from the mean.
+
+add CUSUM columns for 2012 with C = 4.25 and T = 12
+```{r}
+s = list()
+temp2$s= 0
+ CUSUM(C=4.25,T=12,cl=18)
+```
+Summer is detected at Oct 7 at a temp of 68 degrees since this is a warmer year.
+
+add CUSUM columns for 2013 with C = 4.25 and T = 12
+```{r}
+s = list()
+temp2$s= 0
+ CUSUM(C=4.25,T=12,cl=19)
+```
+The end of summer is indicated at Oct 19 at a fairly low temp of 63 degrees.
+
+add CUSUM columns for 2014 with C = 4.25 and T = 12
+```{r}
+s = list()
+temp2$s= 0
+ CUSUM(C=4.25,T=12,cl=20)
+```
+Detected an end of summer at OCt 4 at a fairly low temp of 65 degrees.
+
+add CUSUM columns for 2015 with C = 4.25 and T = 12
+```{r}
+s = list()
+temp2$s= 0
+ CUSUM(C=4.25,T=12,cl=21)
+```
+
+Ok detection for year 2015.  I would otherwise visually select Sept 21 instead of Sept 25.
+
+In summary here are the parameters used and the end of summer detected
+```{r}
+Year<-c(1996:2015)
+C1<-c(4.25,4.25,4.25,4.25,4.25,4.25,4.25,4.25,4.25,4.25,4.25,4.25,4.25,4.25,4.25,4.25,4.25,4.25,4.25,4.25)
+T1<-c(12,12,12,12,12,12,12,12,12,12,12,12,12,12,11,12,12,12,12,12)
+Temp<-c(64,63,63,64,66,62,66,66,64,67,62,67,65,62,68,69,68,63,65,67)
+End<-c("30-Sep","27-Sep","22-Oct","13-Oct","6-Sep","16-Oct","9-Oct","29-Sep","13-Oct","22-Oct","13-Oct","11-Oct","19-Oct",
+"5-Oct","3-Oct","7-Sep","7-Oct","19-Oct","4-Oct","25-Sep")
+mat<-data.frame(Year,C1,T1,End,Temp)
+mat
+```
+
+###Question 6.2.2
+I will take the average temperature of each of the 20 years of summer months we used previously and make a data frame using the averages by year and apply the CUSUM function. By comparing summer averages this way with CUSUM we can find out which year we are first starting to see hotter summer months. I will have to adjust the CUSUM function for this new data frame since we are no longer using data frame temp2 directly.  Also I will use CUSUM formula for increases instead of decreases.
+
+```{r}
+temp3<-temp2[,2:21]
+avg<-data.frame(sapply(X=temp3,FUN=mean))#gives our averages for each year
+avg
+
+#build out the CUSUM function again and run it
+t = list()
+  avg$t= 0
+  CUSUM2<-function(C,T,cl){
+for (j in cl){
+  for (i in 1:nrow(avg)){
+  #s[i-1,j] = 0
+if (i-1 != 0){
+  
+  t <- max(0,avg$t[i-1]+(avg[i,j]-mean(avg[,j])-C))
+}
+    else{ t<- 0}
+    if(t>=T){t}
+    else{t<-0}
+    
+avg$t[[i]]<-t
+  }
+  }
+  return(data.frame(avg[,1],avg$t))}
+  sd(avg$sapply.X...temp3..FUN...mean.)# standard dev is 1.75473 so set C = 0.5 * sd and T = 5 * sd
+  CUSUM2(C=0.8,T=7.5,cl=1)
+
+```
+
+Using the intial parameters C and T we did not find a year where temperature is showing an increasing trend.
+
+Redo with C=0.8 amd T = 3 so that we can show that year 2010 is the first year of increasing temperature detected
+
+```{r}
+CUSUM2(C=0.8,T=3,cl=1)
+```
+
+the first year of increase is 2010 as planned, but it is warranted since the temp is high for 2010 and subsequent (68 degrees) at the point the CUSUM algorithm detected the end of summer.
