@@ -96,11 +96,15 @@ str(dailyavg)
 library(tidyverse)
 ggplot(dailyavg,aes(x=1:123, y= rowMeans.temphw2sf..n...19.))+geom_line()
 ```
-According to the graph it looks like day 88 is a good base year since it is around the mean of the means and  it seems to be where the avg daily seasonality is head back to this level at the end of the graph.
+According to the graph it looks like day 88 is a good base level since it is around the mean of the means and  it seems to be where the avg daily seasonality is head back to this level at the end of the graph.  I will  use this base level to derive C and T by calculating the standard deviation for this base level day 88. 
 
-Find the sd of that year
+Find the sd of that day and C and T using 0.5 x standard deviation and 5 x standard deviation
 ```{r}
-
+std<- sd(temphw2sf[88,])
+C<- std * 0.5
+T<- std * 5
+C
+T
 ```
 
 
