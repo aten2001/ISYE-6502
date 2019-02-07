@@ -9,11 +9,11 @@ html_document: default
 ---
 
 ###Question 7.1
-In my industry the claims dept may want to know if the number of open claims is increasing as soon as possible so that they can make sure they will have enough adjusters to manage these increasing number of claims.  It is important to have an early detection of this.
+In my industry we often have to make projections of what the cost of paying claims at some point in the future for budgetary and pricing considerations.  As you can imagine it is important to factor in inflation in the products you sell for any business; however, this plays a crucial role for insurance since claims are always paid out after we issue the policy (collect premium) and you don't know exactly when. 
 
-I imagine a data frame where each row corresponds to the end of week open claims inventory and the columns would represent a calendar year. This representation will allow us to detect a change in direction for each year and compare the avg open inventory year-by-year just as we have done in question 6.2 below.
+If I were to conduct this time series analysis I would expect the alpha parameter to be nonzero but less than 0.5.  This alpha would indicate that there could be a stronger dependence on past estimates than the actual observations and would correspond to my intuition on the rising cost of medical bills and litigation costs over time in my state.
 
-C and T would be estimated by calculating the standard deviation of a calendar year of open claims on a year designated as a base year for ease of comparison.  The base year can be year shown to have just average claims experience.  We could first use C = 0.5 x std deviation of base year and T = 5 x std deviation of base year and we would adjust T or C as needed based on how CUSUM is performing.
+
 
 ###Question 7.2
 read in text file from class website and examine data
@@ -26,7 +26,8 @@ View(temp)
 Convert the data frame to an vector of integers and plot
 ```{r}
 temp_vec<-as.vector(unlist(temp[,2:21]))
-temp_vec
+head(temp_vec)
+tail(temp_vec)
 class(temp_vec)
 plot(temp_vec)
 
@@ -53,7 +54,10 @@ no real change to trend and observed.  Only change is to the scale of random and
 
 ```{r}
 temphw<-HoltWinters(tempts, alpha = NULL, beta = NULL, gamma = NULL, seasonal = "multiplicative")
-head(temphw)
+temphw$alpha
+temphw$beta
+temphw$gamma
+temphw$coefficients
 temphw$SSE
 plot(temphw)
 ```
@@ -65,7 +69,10 @@ let's try to improve SSE by taking out the unnessary trend parameter beta
 
 ```{r}
 temphw2<-HoltWinters(tempts, alpha = NULL, beta = NULL, gamma = NULL, seasonal = "additive")
-head(temphw2)
+temphw2$alpha
+temphw2$beta
+temphw2$gamma
+temphw2$coefficients
 temphw2$SSE
 plot(temphw2)
 ```
@@ -75,7 +82,10 @@ Try additive seasonality and remove beta
 
 ```{r}
 temphw3<-HoltWinters(tempts, alpha = NULL, beta = FALSE, gamma = NULL, seasonal = "additive")
-head(temphw3)
+temphw3$alpha
+temphw3$beta
+temphw3$gamma
+temphw3$coefficients
 temphw3$SSE
 plot(temphw3)
 ```
@@ -93,276 +103,70 @@ dailyavg<-data.frame(rowMeans(temphw2sf, n = 19))
 head(dailyavg)
 View(dailyavg)
 str(dailyavg)
+mean(dailyavg[,1])
 library(tidyverse)
-ggplot(dailyavg,aes(x=1:123, y= rowMeans.temphw2sf..n...19.))+geom_line()
-```
-According to the graph it looks like day 88 is a good base level since it is around the mean of the means and  it seems to be where the avg daily seasonality is head back to this level at the end of the graph.  I will  use this base level to derive C and T by calculating the standard deviation for this base level day 88. 
+ggplot(dailyavg,aes(x=1:123, y= rowMeans.temphw2sf..n...19.))+geom_line()+geom_hline(yintercept = -0.5)+geom_vline(xintercept=78)
 
-Find the sd of that day and C and T using 0.5 x standard deviation and 5 x standard deviation
+```
+According to the graph it looks like day 78 is a good base level since it is around the mean of the seasonality means and it seems to be where the avg daily seasonality is head back to this level at the end of the graph.  I will  use this base level to see how many days later summer is detected using CUSUM.
+
+First I need to find the sd of dailyavg resembling true summer weather, averages for July-Aug, and apply formulas for C and T using 0.5 x standard deviation and 5 x standard deviation and revise if necessary
 ```{r}
-std<- sd(temphw2sf[88,])
+std<- sd(dailyavg$rowMeans.temphw2sf..n...19[1:62])#standard deviation for July-Aug
 C<- std * 0.5
-T<- std * 5
+T<- std * 5 
 C
 T
+
 ```
 
-
-Find standard deviation of year 1996
-```{r}
-sd(temp2[,2])
-```
-
-add CUSUM columns for 1996 with C = 4.25 and T = 42.5 since standard deviation is 8.5
+add CUSUM columns for dailyavg dataframe with C = 1.616309 and T = 16.16309
 ```{r}
 s = list()
-  temp2$s= 0
+  dailyavg$s= 0
   CUSUM<-function(C,T,cl){
 for (j in cl){
-  for (i in 1:nrow(temp2)){
+  for (i in 1:nrow(dailyavg)){
   #s[i-1,j] = 0
 if (i-1 != 0){
   
-  s <- max(0,temp2$s[i-1]+(mean(temp2[,j])-temp2[i,j]-C))
+  s <- max(0,dailyavg$s[i-1]+(mean(dailyavg[,j])-dailyavg[i,j]-C))#CUSUM to detect decrease
 }
     else{ s<- 0}
     if(s>=T){s}
     else{s<-0}
     
-temp2$s[[i]]<-s
+dailyavg$s[[i]]<-s
   }
   }
-  return(data.frame(temp2[,1],temp2[,j],temp2$s))}
-  CUSUM(C=4.25,T=42.5,cl=2)
+  return(data.frame(1:123,dailyavg[,j],dailyavg$s)[78:123,])}#limit the output
+  CUSUM(C=1.616309,T=16.16309,cl=1)
 ```
-Try T = 12 instead of 15 since Sept 30 should be included.  try year 1996 again
+Using CUSUM and selected levels of C and T, I detected no change to the end of summer.  This is a consistent conclusion to HW3 where we didn't find consistent changes to indicate if summer is ending later or earlier.
 
-add CUSUM columns for 1996 with C = 4.25 and T = 12
-```{r}
-s = list()
-  temp2$s= 0
-  CUSUM(C=4.25,T=12,cl=2)
-```
-better, now end of summer is Sept 30 for year 1996
+Try running daily avg as a time series with the exponential smoothing (estimate only alpha) instead of CUSUM since they are used to do the same thing, making a weighted avg estimates based on current observation and past projections.
 
-add CUSUM columns for 1997 with C = 4.25 and T = 12
+convert dailyavg to ts format
 ```{r}
-s = list()
-  temp2$s= 0
- CUSUM(C=4.25,T=12,cl=3)
-```
-End of summer is detected for Sept 27 with C = 4.25 and T =12.  This is in agreement with my expectiation after looking at the data for the year.
+seas_vec<-as.vector(unlist(dailyavg[,1]))
+class(seas_vec)
+plot(seas_vec)
 
-add CUSUM columns for 1998 with C = 4.25 and T =12
-```{r}
-s = list()
-  temp2$s= 0
-  CUSUM(C=4.25,T=12,cl=4)
+seasts<-ts(seas_vec)
+View(seasts)
+plot(seasts)
 ```
 
-End to summer detected with C =4.25 and T =12 for year 1998 which is a warmer year since it is detected later at Oct 22.  Originally I thought that Sept 29 would be detected as the end of summer, but Oct 22 is a bigger change.
-
-add CUSUM columns for 1999 with C = 4.25 and T = 12
+Run exponential smoothing on avg seasonal time series
 ```{r}
-s = list()
-  temp2$s= 0
-  CUSUM(C=4.25,T=12,cl=5)
-```
-summer end on Oct 13 with C = 4.25 and T = 12.  This is in agreement with my expectations from looking at the data since Oct 13 is the first observation to be this far from the avg temp.
-
-
-add CUSUM columns for 2000 with C = 4.25 and T = 12
-```{r}
-s = list()
-  temp2$s= 0
-  CUSUM(C=4.25,T=12,cl=6)
+seases<-HoltWinters(seasts, alpha = NULL, beta = FALSE, gamma = FALSE, seasonal = "additive")
+seases$x
+seases$alpha
+seases$coefficients
+seases$SSE
+plot(seases)
 ```
 
-Summer ends early for year 2000 with C =4.25 and T = 12 since the first big decrease occurs on Sept 6.
-
-add CUSUM columns for 2001 with C =4.25 and T = 12
-```{r}
-s = list()
-  temp2$s= 0
-  CUSUM(C=4.25,T=12,cl=7)
-```
-
-summer ends pretty much according to expectation on Oct 16 for year 2001 with C =4.25 and T = 12.  Try 2002
-
-add CUSUM columns for 2002 with C =4.25 and T = 12
-```{r}
-s = list()
-  temp2$s= 0
-  CUSUM(C=4.25,T=12,cl=8)
-```
-The algorithm performs well with the same parameters C and T for this year, predicting end of summer to what I would expect as the first big decrease from the mean at Oct 9.  Try 2003
-
-add CUSUM columns for 2003 with C = 4.25 and T = 11
-```{r}
-s = list()
-  temp2$s= 0
- CUSUM(C=4.25,T=11,cl=9)
-```
-
-Summer ends very late in Sept on the 29th.  Based on observing the data I would say Sept 28 or 29th are acceptable answers.  Notice I had to decrease T from 12 to 11 to achieve this.  Try 2004
-
-add CUSUM columns for 2004 with C = 4.25 and T = 12
-```{r}
-s = list()
-  temp2$s= 0
-  CUSUM(C=4.25,T=12,cl=10)
-```
-
-End of summer is detected for C =4.25 and T >=12 at Oct 13.  I would agree with the algorithm based on the data, I don't see a pattern of prolonged decrease in temp.
+Here, we want to focus on the alpha parameter, 0.999956.  The expontial smoothing found optimal alpha to be very close to 1 or in other words, we are better off relying on actual observations than our prior estimates of the mean.  Therefore we can conclude the same as CUSUM that there is no systematic changes overtime to indicate summer is ending later over the 20 year period.  Large changes are due to random variation in the data.
 
 
-add CUSUM columns for 2005 with C = 4.25 and T = 12
-```{r}
-s = list()
-  temp2$s= 0
-  CUSUM(C=4.25,T=12,cl=11)
-```
-
-Same as the prior year, 2004, the end of summer is not detected till later in the year at Oct 22.  I would agree with the algorithm based on the data, I don't see a pattern of prolonged decrease in temp earlier in the data.
-
-add CUSUM columns for 2006 with C = 4.25 and T = 12
-```{r}
-s = list()
-  temp2$s= 0
-  CUSUM(C=4.25,T=12,cl=12)
-```  
-
-End of summer is detected in the year at OCt 13 since it is the first observation to be that far from the mean.  
-
-add CUSUM columns for 2007 with C = 4.25 and T = 12
-```{r}
-s = list()
-  temp2$s= 0
- CUSUM(C=4.25,T=12,cl=13)
-```  
-
-End of summer detected for Oct 11 since this is a relatively warm year like the prior 3 years.
-
-
-add CUSUM columns for 2008 with C = 4.25 and T = 12
-```{r}
-s = list()
-  temp2$s= 0
- CUSUM(C=4.25,T=12,cl=14)
-```  
-End of summer not detected till Oct 19.
-
-add CUSUM columns for 2009 with C = 4.25 and T = 12
-```{r}
-s = list()
-  temp2$s= 0
-  CUSUM(C=4.25,T=12,cl=15)
-```  
-
-End of summer detected at OCt 5 since the observation is the first to be so far from mean.
-
-add CUSUM columns for 2010 with C = 4.25 and T = 12
-```{r}
-s = list()
-temp2$s= 0
- CUSUM(C=4.25,T=12,cl=16)
-```  
-
-End of summer detected at OCt 3 for this year.  I notice that the mean temp must be higher relative to prior years since the change is detected at a higher temp of 68 degrees.
-
-
-add CUSUM columns for 2011 with C = 4.25 and T = 12
-```{r}
-s = list()
-temp2$s= 0
- CUSUM(C=4.25,T=12,cl=17)
-```
-
-end of summer is detected early at Sept 7 with parameters C =4.25 and T=12 since the mean temp is high for this year and this is the first observation far from the mean.
-
-add CUSUM columns for 2012 with C = 4.25 and T = 12
-```{r}
-s = list()
-temp2$s= 0
- CUSUM(C=4.25,T=12,cl=18)
-```
-Summer is detected at Oct 7 at a temp of 68 degrees since this is a warmer year.
-
-add CUSUM columns for 2013 with C = 4.25 and T = 12
-```{r}
-s = list()
-temp2$s= 0
- CUSUM(C=4.25,T=12,cl=19)
-```
-The end of summer is indicated at Oct 19 at a fairly low temp of 63 degrees.
-
-add CUSUM columns for 2014 with C = 4.25 and T = 12
-```{r}
-s = list()
-temp2$s= 0
- CUSUM(C=4.25,T=12,cl=20)
-```
-Detected an end of summer at OCt 4 at a fairly low temp of 65 degrees.
-
-add CUSUM columns for 2015 with C = 4.25 and T = 12
-```{r}
-s = list()
-temp2$s= 0
- CUSUM(C=4.25,T=12,cl=21)
-```
-
-Ok detection for year 2015.  I would otherwise visually select Sept 21 instead of Sept 25.
-
-In summary here are the parameters used and the end of summer detected
-```{r}
-Year<-c(1996:2015)
-C1<-c(4.25,4.25,4.25,4.25,4.25,4.25,4.25,4.25,4.25,4.25,4.25,4.25,4.25,4.25,4.25,4.25,4.25,4.25,4.25,4.25)
-T1<-c(12,12,12,12,12,12,12,12,12,12,12,12,12,12,11,12,12,12,12,12)
-Temp<-c(64,63,63,64,66,62,66,66,64,67,62,67,65,62,68,69,68,63,65,67)
-End<-c("30-Sep","27-Sep","22-Oct","13-Oct","6-Sep","16-Oct","9-Oct","29-Sep","13-Oct","22-Oct","13-Oct","11-Oct","19-Oct",
-"5-Oct","3-Oct","7-Sep","7-Oct","19-Oct","4-Oct","25-Sep")
-mat<-data.frame(Year,C1,T1,End,Temp)
-mat
-```
-
-###Question 6.2.2
-I will take the average temperature of each of the 20 years of summer months we used previously and make a data frame using the averages by year and apply the CUSUM function. By comparing summer averages this way with CUSUM we can find out which year we are first starting to see hotter summer months. I will have to adjust the CUSUM function for this new data frame since we are no longer using data frame temp2 directly.  Also I will use CUSUM formula for increases instead of decreases.
-
-```{r}
-temp3<-temp2[,2:21]
-avg<-data.frame(sapply(X=temp3,FUN=mean))#gives our averages for each year
-avg
-
-#build out the CUSUM function again and run it
-t = list()
-  avg$t= 0
-  CUSUM2<-function(C,T,cl){
-for (j in cl){
-  for (i in 1:nrow(avg)){
-  #s[i-1,j] = 0
-if (i-1 != 0){
-  
-  t <- max(0,avg$t[i-1]+(avg[i,j]-mean(avg[,j])-C))
-}
-    else{ t<- 0}
-    if(t>=T){t}
-    else{t<-0}
-    
-avg$t[[i]]<-t
-  }
-  }
-  return(data.frame(avg[,1],avg$t))}
-  sd(avg$sapply.X...temp3..FUN...mean.)# standard dev is 1.75473 so set C = 0.5 * sd and T = 5 * sd
-  CUSUM2(C=0.8,T=7.5,cl=1)
-
-```
-
-Using the intial parameters C and T we did not find a year where temperature is showing an increasing trend.
-
-Redo with C=0.8 amd T = 3 so that we can show that year 2010 is the first year of increasing temperature detected
-
-```{r}
-CUSUM2(C=0.8,T=3,cl=1)
-```
-
-the first year of increase is 2010 as planned, but it is warranted since the temp is high for 2010 and subsequent (68 degrees) at the point the CUSUM algorithm detected the end of summer.
