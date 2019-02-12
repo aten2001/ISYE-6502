@@ -1,0 +1,78 @@
+---
+  title: "ISYE 6501 Homework 5"
+author: "Mitchell Matsuura"
+date: "February 11, 2019"
+output:
+  word_document: default
+pdf_document: default
+html_document: default
+---
+  
+###Question 8.1
+A common regression problem in my job is 
+
+###Question 8.2
+read in text file from class website and examine data
+```{r}
+crime<-read.table("https://prod-edxapp.edx-cdn.org/assets/courseware/v1/17b85cea5d0e613bf08025ca2907b62f/asset-v1:GTx+ISYE6501x+1T2019+type@asset+block/uscrime.txt",header = TRUE)
+str(crime)
+summary(crime)
+View(crime)
+```
+  It appears the data has a varying scale on one hand of the extreme some variables are in the hundreth decimal place and on the other extreme we have variables in the thousands including our response variable.
+
+No missing data though.  Outliers possibly in POP (top), NW (bottom), Prob (bottom), and Crime (top 2)
+
+Perform linear regression in r
+```{r}
+lm1<-lm(Crime~.,crime)
+summary(lm1)
+
+#coefficients from 1m1
+summary(lm1)$coefficients[,1]
+```
+
+Show a plot of the residuals
+```{r}
+plot(lm1)
+
+```
+q-q plot indicates residuals are normally distributed except for an outlier from observation 11 which is an outlier from HW3.  Therefore using least square regression is appropriate.
+
+Various performance measures prior to predicting with new data
+```{r}
+AIC(lm1)#AIC and BIC
+BIC(lm1)
+
+library(DAAG)
+set.seed(42)
+lm1.cv<-cv.lm(crime,lm1,m=4)#four-fold cross-validation 
+#lm1.cv$cvpred extracts the cross-validated predictions for all 47 data points!!!!
+
+#mean squared error across all folds =77576
+
+
+avgRMSE<-sqrt(77576)#a performance measure for regression
+avgRMSE #279
+
+#Calculate cv adjusted R^2 
+SST<-sum((crime$Crime-mean(crime$Crime))^2)
+SSE<-sum((crime$Crime-lm1.cv$cvpred)^2)
+
+R2<-1-(SSE/SST) #R^2
+n<-nrow(crime)
+k<-ncol(crime)-1
+1-(1-R2)*(n-1)/(n-k-1)
+```
+
+Make prediction based on given data
+```{r}
+newcrime<-c(M=14, So=0, Ed=10.0, Po1=12.0, Po2=15.5, LF=0.640, M.F=94.0, Pop=150, NW=1.1, U1=0.12, U2=3.6, Wealth=3200, Ineq=20.1, Prob=0.04, Time=39.0)
+newcrime<-data.frame(t(newcrime))
+str(newcrime)
+
+predict(lm1,newdata = newcrime)
+```
+
+
+  
