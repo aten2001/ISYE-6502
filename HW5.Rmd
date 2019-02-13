@@ -1,15 +1,24 @@
 ---
-  title: "ISYE 6501 Homework 5"
+title: "ISYE 6501 Homework 5"
 author: "Mitchell Matsuura"
-date: "February 11, 2019"
+date: "February 12, 2019"
 output:
-  word_document: default
+word_document: default
 pdf_document: default
 html_document: default
 ---
   
 ###Question 8.1
-A common regression problem in my job is 
+A common regression problem in my job is predicting the aggregate vaulation of claims we will pay for claims that incurred in a given calendar year aka "Accident Year".  To get this ultimate valuation for an accident year we use a data set that contains say 10 prior accident years and the amount the accident year developed for 10 subsequent accident years.
+
+We then create a glm which has three predictors from this data:
+1) Accident Year.  Experience from accident year can vary buy the types of risks we insure that year (riskier or less risky) and by economic factors.
+
+2) Development Year which shows the claim development for at most 10 subsequent years from the accident year.  Year-to-year development is influenced by new processes, staff changes, and factors similar to accident year.
+
+3) Calendar Year which accounts for the inflation of the year of development regardless of accident year or development year
+
+It may seem odd that we only use 3 predictors; however this is aggregate data and the data set only contains homogenous claims according to line of business like Workers' Compensation for a given state.
 
 ###Question 8.2
 read in text file from class website and examine data
@@ -62,17 +71,585 @@ SSE<-sum((crime$Crime-lm1.cv$cvpred)^2)
 R2<-1-(SSE/SST) #R^2
 n<-nrow(crime)
 k<-ncol(crime)-1
-1-(1-R2)*(n-1)/(n-k-1)
-```
+R2
+n
+k
 
-Make prediction based on given data
+#define a fuction to compute r2, we'll need to update r since SSE will change for a new model parameters
+adjr2<-function(r,n,k){
+ar2<-1-(1-R2)*(n-1)/(n-k-1)
+
+return(ar2)}
+
+adjr2(R2,n,k)
+```
+The adjusted R^2 from cross-validation equal to 0.214 is indicating the fit on new data will be much worse than previously indicated from the in-sample adjusted R^2 of 0.708.  Therefore we can conclude that creating a model with all parameters included in the data set will cause us to overfit random noise in the data that is not present in the 4 validation sets.
+
+Make prediction based on given data; it might give us an indication on the prediction performance of the model based on all predictors.
 ```{r}
-newcrime<-c(M=14, So=0, Ed=10.0, Po1=12.0, Po2=15.5, LF=0.640, M.F=94.0, Pop=150, NW=1.1, U1=0.12, U2=3.6, Wealth=3200, Ineq=20.1, Prob=0.04, Time=39.0)
-newcrime<-data.frame(t(newcrime))
+newcrime<-data.frame(M=14, So=0, Ed=10.0, Po1=12.0, Po2=15.5, LF=0.640, M.F=94.0, Pop=150, NW=1.1, U1=0.12, U2=3.6, Wealth=3200, Ineq=20.1, Prob=0.04, Time=39.0)
 str(newcrime)
 
-predict(lm1,newdata = newcrime)
+predict(lm1,newdata = newcrime)#returns 155
+
+boxplot(crime$Crime)
+min(crime$Crime)#min is 342
+qqnorm(crime$Crime)
+```
+Here we see that the prediction of 155 is too low since the min Crime is actually 342.  We conclude again that our overfit model should not be used and perhaps we should remove predictors that are not significant.
+
+Next steps:
+1) use p-value to remove not significant predictors using 0.05 threshold
+2) use cv.lm to get the cvpred and compute cv adjusted R^2
+3) predict using new data and see where the predicted point sits in the crime distribution
+4) check for improvements to adjusted R^2 and prediction
+
+get the predictors that have p-value > 0.05
+```{r}
+variables<-c('M', 'So', 'Ed', 'Po1', 'Po2', 'LF', 'M.F', 'Pop', 'NW', 'U1', 'U2', 'Wealth', 'Ineq', 'Prob', 'Time')
+library(dplyr)
+pvs<-tibble(variables,coeff=summary(lm1)$coefficients[-1,4])
+pvs[which(pvs$coeff <=0.05),1:2]
+
+```
+Here we see that only 4 of the 15 predictors had p-values less than or equal to 0.05
+
+Build the new model with these predictors and get the coefficients
+```{r}
+lm2<-lm(Crime~M+Ed+Ineq+Prob,crime)
+summary(lm2)
+
+#coefficients from lm2
+summary(lm2)$coefficients[,1]
+```
+Ok this is kind of unexpected.  Let's sequentially remove predictors with p-value greater than 0.05 instead of removing all at once.
+
+remove coefficient with max p-value
+```{r}
+pvs[which(pvs$coeff == max(pvs$coeff)),1:2]
+```
+Here we found that variable So has the max pvalue
+
+refit model without variable So
+```{r}
+lm2<-update(lm1,.~.-So)
+summary(lm2)
+
+#coefficients from lm2
+summary(lm2)$coefficients[,1]
+```
+
+Examine performance metrics for lm2
+```{r}
+
+set.seed(42)
+lm2.cv<-cv.lm(crime,lm2,m=4)#four-fold cross-validation 
+#lm1.cv$cvpred extracts the cross-validated predictions for all 47 data points!!!!
+
+#mean squared error across all folds = 73837 which is lower than 77576 from lm1
+
+
+avgRMSE<-sqrt(73837)#a performance measure for regression
+avgRMSE #272 instead of 279 from lm1
+
+#Calculate cv adjusted R^2 
+SSE<-sum((crime$Crime-lm2.cv$cvpred)^2)
+
+R2<-1-(SSE/SST) #R^2
+n<-nrow(crime)
+k<-ncol(crime)-2
+R2
+n
+k
+
+adjr2(R2,n,k)
+
+AIC(lm2)# now 648 and was 650 from lm1
+```
+Here we see that adjusted R^2 increased from 0.214 to 0.275 after removing the predictor So.
+
+rerun our prediction with the new data without variable So
+```{r}
+newcrime<-data.frame(M=14, Ed=10.0, Po1=12.0, Po2=15.5, LF=0.640, M.F=94.0, Pop=150, NW=1.1, U1=0.12, U2=3.6, Wealth=3200, Ineq=20.1, Prob=0.04, Time=39.0)
+str(newcrime)
+
+predict(lm2,newdata = newcrime)#returns 160 now was 155
+
+```
+We still see the need for more improvement since adjusted R^2 is still low and prediction is also below the min observation of 342.  So continue model refinement process.
+
+get the predictors that have p-value > 0.05
+```{r}
+variables<-c('M', 'Ed', 'Po1', 'Po2', 'LF', 'M.F', 'Pop', 'NW', 'U1', 'U2', 'Wealth', 'Ineq', 'Prob', 'Time')#tookout So
+library(dplyr)
+pvs<-tibble(variables,coeff=summary(lm2)$coefficients[-1,4])#
+pvs[which(pvs$coeff == max(pvs$coeff)),1:2]
+
+```
+
+Remove the Time variable and rerun model
+```{r}
+lm3<-update(lm2,.~.-Time)
+summary(lm3)
+
+#coefficients from lm3
+summary(lm3)$coefficients[,1]
+```
+
+Examine performance metrics for lm3
+```{r}
+
+set.seed(42)
+lm3.cv<-cv.lm(crime,lm3,m=4)#four-fold cross-validation 
+#lm1.cv$cvpred extracts the cross-validated predictions for all 47 data points!!!!
+
+#mean squared error across all folds = 71148 which is lower than 73837 from lm2
+
+
+avgRMSE<-sqrt(71148)#a performance measure for regression
+avgRMSE #267 instead of 272 from lm2
+
+#Calculate cv adjusted R^2 
+SSE<-sum((crime$Crime-lm3.cv$cvpred)^2)
+
+R2<-1-(SSE/SST) #R^2
+n<-nrow(crime)
+k<-ncol(crime)-3
+R2
+n
+k
+
+adjr2(R2,n,k)
+
+AIC(lm3)# now 646 and was 648 from lm2
+```
+Here we see that adjusted R^2 increased from 0.275 to 0.323 after removing the predictor Time.
+
+rerun our prediction with the new data without variable Time and So
+```{r}
+newcrime<-data.frame(M=14, Ed=10.0, Po1=12.0, Po2=15.5, LF=0.640, M.F=94.0, Pop=150, NW=1.1, U1=0.12, U2=3.6, Wealth=3200, Ineq=20.1, Prob=0.04)
+str(newcrime)
+
+predict(lm3,newdata = newcrime)#returns 286 now was 160
+
+```
+We've made progress but still there is a need for more improvement since adjusted R^2 is still low and prediction is also below the min observation of 342.  So continue model refinement process.
+
+get the predictors that have p-value > 0.05
+```{r}
+variables<-c('M', 'Ed', 'Po1', 'Po2', 'LF', 'M.F', 'Pop', 'NW', 'U1', 'U2', 'Wealth', 'Ineq', 'Prob')#tookout So and Time
+library(dplyr)
+pvs<-tibble(variables,coeff=summary(lm3)$coefficients[-1,4])#
+pvs[which(pvs$coeff == max(pvs$coeff)),1:2]
+
+```
+
+Remove the LF variable and rerun model
+```{r}
+lm4<-update(lm3,.~.-LF)
+summary(lm4)
+
+#coefficients from lm3
+summary(lm4)$coefficients[,1]
+```
+
+Examine performance metrics for lm4
+```{r}
+
+set.seed(42)
+lm4.cv<-cv.lm(crime,lm4,m=4)#four-fold cross-validation 
+#lm1.cv$cvpred extracts the cross-validated predictions for all 47 data points!!!!
+
+#mean squared error across all folds = 53841 which is lower than 71148 from lm3
+
+
+avgRMSE<-sqrt(53841)#a performance measure for regression
+avgRMSE #232 instead of 267 from lm3
+
+#Calculate cv adjusted R^2 
+SSE<-sum((crime$Crime-lm4.cv$cvpred)^2)
+
+R2<-1-(SSE/SST) #R^2
+n<-nrow(crime)
+k<-ncol(crime)-4
+R2
+n
+k
+
+adjr2(R2,n,k)
+
+AIC(lm4)# now 645 and was 646 from lm3
+```
+Here we see that adjusted R^2 increased greatly from 0.323 to 0.502 after removing the predictor LF.
+
+rerun our prediction with the new data without variable LF, Time and So
+```{r}
+newcrime<-data.frame(M=14, Ed=10.0, Po1=12.0, Po2=15.5, M.F=94.0, Pop=150, NW=1.1, U1=0.12, U2=3.6, Wealth=3200, Ineq=20.1, Prob=0.04)
+str(newcrime)
+
+predict(lm4,newdata = newcrime)#returns 451 now was 286
+
+```
+We've made great progress since adjusted R^2 is above 0.5 and prediction is now above the min observation of 342.  However, there is coefficents we can still remove so continue model refinement process.
+
+get the predictors that have p-value > 0.05
+```{r}
+variables<-c('M', 'Ed', 'Po1', 'Po2', 'M.F', 'Pop', 'NW', 'U1', 'U2', 'Wealth', 'Ineq', 'Prob')#tookout So, Time, LF
+pvs<-tibble(variables,coeff=summary(lm4)$coefficients[-1,4])#
+pvs[which(pvs$coeff == max(pvs$coeff)),1:2]
+
+```
+
+Remove the NW variable and rerun model
+```{r}
+lm5<-update(lm4,.~.-NW)
+summary(lm5)
+
+#coefficients from lm3
+summary(lm5)$coefficients[,1]
+```
+
+Examine performance metrics for lm5
+```{r}
+
+set.seed(42)
+lm5.cv<-cv.lm(crime,lm5,m=4)#four-fold cross-validation 
+#lm1.cv$cvpred extracts the cross-validated predictions for all 47 data points!!!!
+
+#mean squared error across all folds = 54328  which is higher than 53841 from lm4
+
+
+avgRMSE<-sqrt(54328 )#a performance measure for regression
+avgRMSE #233 instead of 232 from lm4
+
+#Calculate cv adjusted R^2 
+SSE<-sum((crime$Crime-lm5.cv$cvpred)^2)
+
+R2<-1-(SSE/SST) #R^2
+n<-nrow(crime)
+k<-ncol(crime)-5
+R2
+n
+k
+
+adjr2(R2,n,k)
+
+AIC(lm5)# now 643 and was 645 from lm4
+```
+Here we see that adjusted R^2 increased from 0.502 to 0.512 after removing the predictor NW.
+
+rerun our prediction with the new data without variable NW, LF, Time and So
+```{r}
+newcrime<-data.frame(M=14, Ed=10.0, Po1=12.0, Po2=15.5, M.F=94.0, Pop=150, U1=0.12, U2=3.6, Wealth=3200, Ineq=20.1, Prob=0.04)
+str(newcrime)
+
+predict(lm5,newdata = newcrime)#returns 556 now was 451
+
+```
+We are making progress since adjusted R^2 is slightly above the previous model; prediction is still above the min observation of 342 and still increasing.  Therefore, continue removing the variable with max p-value.
+
+get the predictors that have p-value > 0.05
+```{r}
+variables<-c('M', 'Ed', 'Po1', 'Po2', 'M.F', 'Pop', 'U1', 'U2', 'Wealth', 'Ineq', 'Prob')#tookout LF, So and Time
+pvs<-tibble(variables,coeff=summary(lm5)$coefficients[-1,4])#
+pvs[which(pvs$coeff == max(pvs$coeff)),1:2]
+
+```
+
+Remove the Po2 variable and rerun model
+```{r}
+lm6<-update(lm5,.~.-Po2)
+summary(lm6)
+
+#coefficients from lm3
+summary(lm6)$coefficients[,1]
+```
+
+Examine performance metrics for lm6
+```{r}
+
+set.seed(42)
+lm6.cv<-cv.lm(crime,lm6,m=4)#four-fold cross-validation 
+#lm1.cv$cvpred extracts the cross-validated predictions for all 47 data points!!!!
+
+#mean squared error across all folds = 50611  which is lower than 54328 from lm5
+
+
+avgRMSE<-sqrt(50611 )#a performance measure for regression
+avgRMSE #225 instead of 233 from lm5
+
+#Calculate cv adjusted R^2 
+SSE<-sum((crime$Crime-lm6.cv$cvpred)^2)
+
+R2<-1-(SSE/SST) #R^2
+n<-nrow(crime)
+k<-ncol(crime)-6
+R2
+n
+k
+
+adjr2(R2,n,k)
+
+AIC(lm6)# now 642 and was 643 from lm5
+```
+Here we see that adjusted R^2 increased from 0.512 to 0.558 after removing the predictor Po2.
+
+rerun our prediction with the new data without variable Po2, NW, LF, Time and So
+```{r}
+newcrime<-data.frame(M=14, Ed=10.0, Po1=12.0, M.F=94.0, Pop=150, U1=0.12, U2=3.6, Wealth=3200, Ineq=20.1, Prob=0.04)
+str(newcrime)
+
+predict(lm6,newdata = newcrime)#returns 826 now was 556
+
+```
+We are still making progress since adjusted R^2 is above the previous model; prediction is still above the min observation of 342 and still increasing.  Therefore, try to remove the variable with max p-value again.
+
+get the predictors that have p-value > 0.05
+```{r}
+variables<-c('M', 'Ed', 'Po1', 'M.F', 'Pop', 'U1', 'U2', 'Wealth', 'Ineq', 'Prob')#tookout Po2, NW LF, So and Time
+pvs<-tibble(variables,coeff=summary(lm6)$coefficients[-1,4])#
+pvs[which(pvs$coeff == max(pvs$coeff)),1:2]
+
+```
+
+Remove the Pop variable and rerun model
+```{r}
+lm7<-update(lm6,.~.-Pop)
+summary(lm7)
+
+#coefficients from lm7
+summary(lm7)$coefficients[,1]
+```
+
+Examine performance metrics for lm7
+```{r}
+
+set.seed(42)
+lm7.cv<-cv.lm(crime,lm7,m=4)#four-fold cross-validation 
+#lm1.cv$cvpred extracts the cross-validated predictions for all 47 data points!!!!
+
+#mean squared error across all folds = 51021  which is higher than 50611 from lm6
+
+
+avgRMSE<-sqrt(51021 )#a performance measure for regression
+avgRMSE #226 instead of  225 from lm6
+
+#Calculate cv adjusted R^2 
+SSE<-sum((crime$Crime-lm7.cv$cvpred)^2)
+
+R2<-1-(SSE/SST) #R^2
+n<-nrow(crime)
+k<-ncol(crime)-7
+R2
+n
+k
+
+adjr2(R2,n,k)
+
+AIC(lm7)# now 640 and was 642 from lm6
+```
+
+Here we see that adjusted R^2 increased from 0.558 to 0.567 after removing the predictor Pop.
+
+rerun our prediction with the new data without variable Pop, Po2, NF, LF, Time and So
+```{r}
+newcrime<-data.frame(M=14, Ed=10.0, Po1=12.0, M.F=94.0, U1=0.12, U2=3.6, Wealth=3200, Ineq=20.1, Prob=0.04)
+str(newcrime)
+
+predict(lm7,newdata = newcrime)#returns 885 now was 826
+
+```
+
+We are still making progress since adjusted R^2 is above the previous model; prediction is still above the min observation of 342 and still increasing.  Therefore, try to remove the variable with the max p-value again.
+
+get the predictors that have p-value > 0.05
+```{r}
+variables<-c('M', 'Ed', 'Po1', 'M.F', 'U1', 'U2', 'Wealth', 'Ineq', 'Prob')#tookout Pop, Po2, NW, LF, So and Time
+pvs<-tibble(variables,coeff=summary(lm7)$coefficients[-1,4])#
+pvs[which(pvs$coeff == max(pvs$coeff)),1:2]
+
+```
+Remove the Wealth variable and rerun model
+```{r}
+lm8<-update(lm7,.~.-Wealth)
+summary(lm8)
+
+#coefficients from lm8
+summary(lm8)$coefficients[,1]
+```
+
+Examine performance metrics for lm8
+```{r}
+
+set.seed(42)
+lm8.cv<-cv.lm(crime,lm8,m=4)#four-fold cross-validation 
+#lm1.cv$cvpred extracts the cross-validated predictions for all 47 data points!!!!
+
+#mean squared error across all folds = 47610  which is less than 51021 from lm7
+
+
+avgRMSE<-sqrt(47610 )#a performance measure for regression
+avgRMSE #218 instead of  226 from lm7
+
+#Calculate cv adjusted R^2 
+SSE<-sum((crime$Crime-lm8.cv$cvpred)^2)
+
+R2<-1-(SSE/SST) #R^2
+n<-nrow(crime)
+k<-ncol(crime)-8
+R2
+n
+k
+
+adjr2(R2,n,k)
+
+AIC(lm8)# now 639 and was 640 from lm7
+```
+
+Here we see that adjusted R^2 increased from 0.567 to 0.606 after removing the predictor Wealth.
+
+rerun our prediction with the new data without variable Wealth, Pop, Po2, NW, LF, Time and So
+```{r}
+newcrime<-data.frame(M=14, Ed=10.0, Po1=12.0, M.F=94.0, U1=0.12, U2=3.6, Ineq=20.1, Prob=0.04)
+str(newcrime)
+
+predict(lm8,newdata = newcrime)#returns 1038 now was 885
+
+```
+
+We are still making progress since adjusted R^2 is above the previous model; prediction is still above the min observation of 342 and still increasing.  Therefore, try to remove the variable with the max p-value again.
+
+get the predictors that have p-value > 0.05
+```{r}
+variables<-c('M', 'Ed', 'Po1', 'M.F', 'U1', 'U2', 'Ineq', 'Prob')#tookout Wealth, Pop, Po2, NW, LF, So and Time
+pvs<-tibble(variables,coeff=summary(lm8)$coefficients[-1,4])#
+pvs[which(pvs$coeff == max(pvs$coeff)),1:2]
+
+```
+
+Remove the M.F variable and rerun model
+```{r}
+lm9<-update(lm8,.~.-M.F)
+summary(lm9)
+
+#coefficients from lm9
+summary(lm9)$coefficients[,1]
+```
+
+Examine performance metrics for lm8
+```{r}
+
+set.seed(42)
+lm9.cv<-cv.lm(crime,lm9,m=4)#four-fold cross-validation 
+#lm1.cv$cvpred extracts the cross-validated predictions for all 47 data points!!!!
+
+#mean squared error across all folds = 47354   which is lower than 47610 from lm8
+
+
+avgRMSE<-sqrt(47354 )#a performance measure for regression
+avgRMSE #221 instead of  218 from lm8
+
+#Calculate cv adjusted R^2 
+SSE<-sum((crime$Crime-lm9.cv$cvpred)^2)
+
+R2<-1-(SSE/SST) #R^2
+n<-nrow(crime)
+k<-ncol(crime)-9
+R2
+n
+k
+
+adjr2(R2,n,k)
+
+AIC(lm9)# now 641 and was 639 from lm8
+```
+
+Here we see that adjusted R^2 increased from 0.606 to 0.618 after removing the predictor M.F.
+
+rerun our prediction with the new data without variable M.F, Wealth, Pop, Po2, NW, LF, Time and So
+```{r}
+newcrime<-data.frame(M=14, Ed=10.0, Po1=12.0, U1=0.12, U2=3.6, Ineq=20.1, Prob=0.04)
+str(newcrime)
+
+predict(lm9,newdata = newcrime)#returns 1186 now was 1038
+
+```
+
+We are still making progress since adjusted R^2 is above the previous model; prediction is still above the min observation of 342 and still increasing.  Therefore, try to remove the variable with the max p-value.
+
+get the predictors that have p-value > 0.05
+```{r}
+variables<-c('M', 'Ed', 'Po1', 'U1', 'U2', 'Ineq', 'Prob')#tookout Wealth, Pop, Po2, NW, LF, So and Time
+pvs<-tibble(variables,coeff=summary(lm9)$coefficients[-1,4])#
+pvs[which(pvs$coeff == max(pvs$coeff)),1:2]
+
+```
+
+Remove the U1 variable and rerun model
+```{r}
+lm10<-update(lm9,.~.-U1)
+summary(lm10)
+
+#coefficients from lm10
+summary(lm10)$coefficients[,1]
+```
+
+Examine performance metrics for lm10
+```{r}
+
+set.seed(42)
+lm10.cv<-cv.lm(crime,lm10,m=4)#four-fold cross-validation 
+#lm1.cv$cvpred extracts the cross-validated predictions for all 47 data points!!!!
+
+#mean squared error across all folds = 41113   which is lower than 47354 from lm9
+
+
+avgRMSE<-sqrt(41113  )#a performance measure for regression
+avgRMSE #203 instead of  221 from lm9
+
+#Calculate cv adjusted R^2 
+SSE<-sum((crime$Crime-lm10.cv$cvpred)^2)
+
+R2<-1-(SSE/SST) #R^2
+n<-nrow(crime)
+k<-ncol(crime)-10
+R2
+n
+k
+
+adjr2(R2,n,k)
+
+AIC(lm10)# now 640 and was 641 from lm9
+```
+
+Here we see that adjusted R^2 increased from 0.618 to 0.677 after removing the predictor U1
+
+rerun our prediction with the new data without variable U1, M.F, Wealth, Pop, Po2, NW, LF, Time and So
+```{r}
+newcrime<-data.frame(M=14, Ed=10.0, Po1=12.0, U2=3.6, Ineq=20.1, Prob=0.04)
+str(newcrime)
+
+predict(lm10,newdata = newcrime)#returns 1304 now was 1186
+
 ```
 
 
-  
+Finally we have removed all variables with p-value > 0.05 and have greatly improved cross-validated adjusted R^2 from 0.214 to 0.677, which is our best estimate of out-of-sample fit without actually partitioning the data into a true hold-out sample.  Comparing the in-sample adjusted R^2 of 0.731 to 0.677, we see we are much closer, indicating we much less overfit.  Recall in the first model in-sample adjusted R^2 was 0.708 while cv adjusted R^2 was again 0.214.
+
+I've done other metrics like AIC and avg RMSE from cross-validation which also indicate great improvement.
+
+Let's plot the distribution again to see where our latest predicted point stands in the distribution
+```{r}
+boxplot(crime$Crime)
+```
+
+So the point 1304 is above the 3rd quartile now but within the top wisker.  This is not unexpected if you compare the coefficients from lm1 model and lm10.
+
+```{r}
+summary(lm1)$coefficients[,1]
+summary(lm10)$coefficients[,1]
+```
+
+We got rid of lots of variables with negative coefficients: So, Po2, LF, Pop, U1, and Time 
+
+
