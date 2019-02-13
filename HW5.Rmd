@@ -70,7 +70,7 @@ SSE<-sum((crime$Crime-lm1.cv$cvpred)^2)
 
 R2<-1-(SSE/SST) #R^2
 n<-nrow(crime)
-k<-ncol(crime)-1
+k<-length(lm1$coefficients)-1
 R2
 n
 k
@@ -156,10 +156,8 @@ avgRMSE #272 instead of 279 from lm1
 SSE<-sum((crime$Crime-lm2.cv$cvpred)^2)
 
 R2<-1-(SSE/SST) #R^2
-n<-nrow(crime)
-k<-ncol(crime)-2
+k<-length(lm2$coefficients)-1
 R2
-n
 k
 
 adjr2(R2,n,k)
@@ -213,10 +211,8 @@ avgRMSE #267 instead of 272 from lm2
 SSE<-sum((crime$Crime-lm3.cv$cvpred)^2)
 
 R2<-1-(SSE/SST) #R^2
-n<-nrow(crime)
-k<-ncol(crime)-3
+k<-length(lm3$coefficients)-1
 R2
-n
 k
 
 adjr2(R2,n,k)
@@ -270,10 +266,8 @@ avgRMSE #232 instead of 267 from lm3
 SSE<-sum((crime$Crime-lm4.cv$cvpred)^2)
 
 R2<-1-(SSE/SST) #R^2
-n<-nrow(crime)
-k<-ncol(crime)-4
+k<-length(lm4$coefficients)-1
 R2
-n
 k
 
 adjr2(R2,n,k)
@@ -326,10 +320,8 @@ avgRMSE #233 instead of 232 from lm4
 SSE<-sum((crime$Crime-lm5.cv$cvpred)^2)
 
 R2<-1-(SSE/SST) #R^2
-n<-nrow(crime)
-k<-ncol(crime)-5
+k<-length(lm5$coefficients)-1
 R2
-n
 k
 
 adjr2(R2,n,k)
@@ -382,10 +374,8 @@ avgRMSE #225 instead of 233 from lm5
 SSE<-sum((crime$Crime-lm6.cv$cvpred)^2)
 
 R2<-1-(SSE/SST) #R^2
-n<-nrow(crime)
-k<-ncol(crime)-6
+k<-length(lm6$coefficients)-1
 R2
-n
 k
 
 adjr2(R2,n,k)
@@ -438,10 +428,8 @@ avgRMSE #226 instead of  225 from lm6
 SSE<-sum((crime$Crime-lm7.cv$cvpred)^2)
 
 R2<-1-(SSE/SST) #R^2
-n<-nrow(crime)
-k<-ncol(crime)-7
+k<-length(lm7$coefficients)-1
 R2
-n
 k
 
 adjr2(R2,n,k)
@@ -495,10 +483,8 @@ avgRMSE #218 instead of  226 from lm7
 SSE<-sum((crime$Crime-lm8.cv$cvpred)^2)
 
 R2<-1-(SSE/SST) #R^2
-n<-nrow(crime)
-k<-ncol(crime)-8
+k<-length(lm8$coefficients)-1
 R2
-n
 k
 
 adjr2(R2,n,k)
@@ -553,10 +539,8 @@ avgRMSE #221 instead of  218 from lm8
 SSE<-sum((crime$Crime-lm9.cv$cvpred)^2)
 
 R2<-1-(SSE/SST) #R^2
-n<-nrow(crime)
-k<-ncol(crime)-9
+k<-length(lm9$coefficients)-1
 R2
-n
 k
 
 adjr2(R2,n,k)
@@ -611,10 +595,8 @@ avgRMSE #203 instead of  221 from lm9
 SSE<-sum((crime$Crime-lm10.cv$cvpred)^2)
 
 R2<-1-(SSE/SST) #R^2
-n<-nrow(crime)
-k<-ncol(crime)-10
+k<-length(lm10$coefficients)-1
 R2
-n
 k
 
 adjr2(R2,n,k)
