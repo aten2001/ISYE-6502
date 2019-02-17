@@ -61,12 +61,12 @@ lm1.cv<-cv.lm(crime,lm1,m=4)#four-fold cross-validation
 #mean squared error across all folds =77576
 
 
-avgRMSE<-sqrt(77576)#a performance measure for regression
+avgRMSE<-sqrt(attr(lm1.cv,"ms"))#a performance measure for regression
 avgRMSE #279
 
 #Calculate cv adjusted R^2 
 SST<-sum((crime$Crime-mean(crime$Crime))^2)
-SSE<-sum((crime$Crime-lm1.cv$cvpred)^2)
+SSE<-sum((lm1.cv$Crime-lm1.cv$cvpred)^2)
 
 R2<-1-(SSE/SST) #R^2
 n<-nrow(crime)
@@ -149,11 +149,11 @@ lm2.cv<-cv.lm(crime,lm2,m=4)#four-fold cross-validation
 #mean squared error across all folds = 73837 which is lower than 77576 from lm1
 
 
-avgRMSE<-sqrt(73837)#a performance measure for regression
+avgRMSE<-sqrt(attr(lm2.cv,"ms"))#a performance measure for regression
 avgRMSE #272 instead of 279 from lm1
 
 #Calculate cv adjusted R^2 
-SSE<-sum((crime$Crime-lm2.cv$cvpred)^2)
+SSE<-sum((lm2.cv$Crime-lm2.cv$cvpred)^2)
 
 R2<-1-(SSE/SST) #R^2
 k<-length(lm2$coefficients)-1
@@ -204,11 +204,11 @@ lm3.cv<-cv.lm(crime,lm3,m=4)#four-fold cross-validation
 #mean squared error across all folds = 71148 which is lower than 73837 from lm2
 
 
-avgRMSE<-sqrt(71148)#a performance measure for regression
+avgRMSE<-sqrt(attr(lm3.cv,"ms"))#a performance measure for regression
 avgRMSE #267 instead of 272 from lm2
 
 #Calculate cv adjusted R^2 
-SSE<-sum((crime$Crime-lm3.cv$cvpred)^2)
+SSE<-sum((lm3.cv$Crime-lm3.cv$cvpred)^2)
 
 R2<-1-(SSE/SST) #R^2
 k<-length(lm3$coefficients)-1
@@ -259,11 +259,11 @@ lm4.cv<-cv.lm(crime,lm4,m=4)#four-fold cross-validation
 #mean squared error across all folds = 53841 which is lower than 71148 from lm3
 
 
-avgRMSE<-sqrt(53841)#a performance measure for regression
+avgRMSE<-sqrt(attr(lm4.cv,"ms"))#a performance measure for regression
 avgRMSE #232 instead of 267 from lm3
 
 #Calculate cv adjusted R^2 
-SSE<-sum((crime$Crime-lm4.cv$cvpred)^2)
+SSE<-sum((lm4.cv$Crime-lm4.cv$cvpred)^2)
 
 R2<-1-(SSE/SST) #R^2
 k<-length(lm4$coefficients)-1
@@ -313,11 +313,11 @@ lm5.cv<-cv.lm(crime,lm5,m=4)#four-fold cross-validation
 #mean squared error across all folds = 54328  which is higher than 53841 from lm4
 
 
-avgRMSE<-sqrt(54328 )#a performance measure for regression
+avgRMSE<-sqrt(attr(lm5.cv,"ms") )#a performance measure for regression
 avgRMSE #233 instead of 232 from lm4
 
 #Calculate cv adjusted R^2 
-SSE<-sum((crime$Crime-lm5.cv$cvpred)^2)
+SSE<-sum((lm5.cv$Crime-lm5.cv$cvpred)^2)
 
 R2<-1-(SSE/SST) #R^2
 k<-length(lm5$coefficients)-1
@@ -367,11 +367,11 @@ lm6.cv<-cv.lm(crime,lm6,m=4)#four-fold cross-validation
 #mean squared error across all folds = 50611  which is lower than 54328 from lm5
 
 
-avgRMSE<-sqrt(50611 )#a performance measure for regression
+avgRMSE<-sqrt(attr(lm6.cv,"ms"))#a performance measure for regression
 avgRMSE #225 instead of 233 from lm5
 
 #Calculate cv adjusted R^2 
-SSE<-sum((crime$Crime-lm6.cv$cvpred)^2)
+SSE<-sum((lm6.cv$Crime-lm6.cv$cvpred)^2)
 
 R2<-1-(SSE/SST) #R^2
 k<-length(lm6$coefficients)-1
@@ -421,11 +421,11 @@ lm7.cv<-cv.lm(crime,lm7,m=4)#four-fold cross-validation
 #mean squared error across all folds = 51021  which is higher than 50611 from lm6
 
 
-avgRMSE<-sqrt(51021 )#a performance measure for regression
+avgRMSE<-sqrt(attr(lm7.cv,"ms") )#a performance measure for regression
 avgRMSE #226 instead of  225 from lm6
 
 #Calculate cv adjusted R^2 
-SSE<-sum((crime$Crime-lm7.cv$cvpred)^2)
+SSE<-sum((lm7.cv$Crime-lm7.cv$cvpred)^2)
 
 R2<-1-(SSE/SST) #R^2
 k<-length(lm7$coefficients)-1
@@ -476,11 +476,11 @@ lm8.cv<-cv.lm(crime,lm8,m=4)#four-fold cross-validation
 #mean squared error across all folds = 47610  which is less than 51021 from lm7
 
 
-avgRMSE<-sqrt(47610 )#a performance measure for regression
+avgRMSE<-sqrt(attr(lm8.cv,"ms") )#a performance measure for regression
 avgRMSE #218 instead of  226 from lm7
 
 #Calculate cv adjusted R^2 
-SSE<-sum((crime$Crime-lm8.cv$cvpred)^2)
+SSE<-sum((lm8.cv$Crime-lm8.cv$cvpred)^2)
 
 R2<-1-(SSE/SST) #R^2
 k<-length(lm8$coefficients)-1
@@ -532,11 +532,11 @@ lm9.cv<-cv.lm(crime,lm9,m=4)#four-fold cross-validation
 #mean squared error across all folds = 47354   which is lower than 47610 from lm8
 
 
-avgRMSE<-sqrt(47354 )#a performance measure for regression
+avgRMSE<-sqrt(attr(lm9.cv,"ms"))#a performance measure for regression
 avgRMSE #221 instead of  218 from lm8
 
 #Calculate cv adjusted R^2 
-SSE<-sum((crime$Crime-lm9.cv$cvpred)^2)
+SSE<-sum((lm9.cv$Crime-lm9.cv$cvpred)^2)
 
 R2<-1-(SSE/SST) #R^2
 k<-length(lm9$coefficients)-1
@@ -588,11 +588,11 @@ lm10.cv<-cv.lm(crime,lm10,m=4)#four-fold cross-validation
 #mean squared error across all folds = 41113   which is lower than 47354 from lm9
 
 
-avgRMSE<-sqrt(41113  )#a performance measure for regression
+avgRMSE<-sqrt(attr(lm10.cv,"ms"))#a performance measure for regression
 avgRMSE #203 instead of  221 from lm9
 
 #Calculate cv adjusted R^2 
-SSE<-sum((crime$Crime-lm10.cv$cvpred)^2)
+SSE<-sum((lm10.cv$Crime-lm10.cv$cvpred)^2)
 
 R2<-1-(SSE/SST) #R^2
 k<-length(lm10$coefficients)-1
