@@ -1,0 +1,276 @@
+---
+title: "ISYE 6501 Homework 6"
+author: "Mitchell Matsuura"
+date: "February 20, 2019"
+output:
+
+word_document: default
+pdf_document: default
+html_document: default
+---
+  
+
+###Question 9.1
+read in text file from class website and examine data
+```{r}
+crime<-read.table("https://prod-edxapp.edx-cdn.org/assets/courseware/v1/17b85cea5d0e613bf08025ca2907b62f/asset-v1:GTx+ISYE6501x+1T2019+type@asset+block/uscrime.txt",header = TRUE)
+str(crime)
+summary(crime)
+View(crime)
+```
+  It appears the data has a varying scale on one hand of the extreme some variables are in the hundreth decimal place and on the other extreme we have variables in the thousands including our response variable.
+
+No missing data though.  Outliers possibly in POP (top), NW (bottom), Prob (bottom), and Crime (top 2)
+
+Perform pca
+```{r}
+Crime<-which(names(crime) == 'Crime')
+crimepca<-prcomp(crime[,-Crime], scale = TRUE, retx = TRUE)
+crimepca
+#coefficients from 1m1
+summary(crimepca)
+
+```
+
+Show a plot of the eigenvalues = variances note it automatically plots the variances from pca object
+```{r}
+plot(crimepca,type="line",cex.lab=1.5, cex.main=1.5)
+abline(h=1,lty=3, col="red")
+```
+Indicates we should keep the first 4 components since the slope flattens out after the fourth and strictly following Kaiser criterion that variance should be > 1 to include component.
+
+###Proceed to get back our original features for the selected eigenvectors
+First get the 'scores' the nxk matrix of the PCA projections 'scores' given by multiplying the scaled data matrix by the selected eigenvectors which is already given by the "x"" object in prcomp.
+
+Then run a regression on the scores
+
+```{r}
+
+score<-crimepca$x[,1:4] #score = X %*% V scaled data times eigenvectors
+
+pcacrime<-data.frame(score, Crime=crime$Crime)
+
+lm1<-lm(Crime~., pcacrime)
+summary(lm1)
+
+```
+
+
+Examine performance metrics for lm1
+```{r}
+library(DAAG)
+set.seed(42)
+lm1.cv<-cv.lm(pcacrime,lm1,m=4)#four-fold cross-validation 
+#lm1.cv$cvpred extracts the cross-validated predictions for all 47 data points!!!!
+
+#mean squared error across all folds = 123084 which is higher than 77576 from the first model in hw5
+
+
+avgRMSE<-sqrt(attr(lm1.cv,"ms"))#a performance measure for regression
+avgRMSE #351 instead of 279 from first model in hw5
+
+#Calculate cv adjusted R^2
+SST<-sum((lm1.cv$Crime-mean(lm1.cv$Crime))^2)
+SSE<-sum((lm1.cv$Crime-lm1.cv$cvpred)^2)
+
+R2<-1-(SSE/SST) #R^2
+n<-nrow(crime)
+k<-4
+R2
+n
+k
+
+1-(1-R2)*(n-1)/(n-k-1)
+
+AIC(lm1)# now 687 and was 650 from first model in hw5
+```
+
+
+We see that the fit according to adjusted R^2 took a beating since it decreased greatly from 0.214 to 0.0792 after PCA. This is since we simplified the data by removing correlation among the predictors and only selected to include the top four PCAs which explained just under 80% of the variance. 
+
+
+
+Build the model with PCA reconstructed data and get the coefficients 
+
+```{r}
+
+aprime<-crimepca$rotation[,1:4] %*% summary(lm1)$coef[-1,1]#doing matrix multiplication to get back original variables
+
+a0<-summary(lm1)$coef[1] - sum(aprime * (crimepca$center/crimepca$scale))
+aj<-aprime / crimepca$scale
+
+a0
+aj
+
+```
+
+
+predict new city using coefficients there are two ways of doing this so I am just running both to see if I get the same result
+```{r}
+newcrime<-data.frame(M=14, So=0, Ed=10.0, Po1=12.0, Po2=15.5, LF=0.640, M.F=94.0, Pop=150, NW=1.1, U1=0.12, U2=3.6, Wealth=3200, Ineq=20.1, Prob=0.04, Time=39.0)
+str(newcrime)
+
+a2<-rbind(summary(lm1)$coef[1],aprime)#new coefficients of the model w/ intercept
+a2
+
+newpredict<-as.matrix(scale(newcrime,center = crimepca$center, scale = (crimepca$scale))) %*% a2[-1,] + a2[1]
+newpredict
+
+newpredict<-as.matrix(newcrime) %*% aj + a0
+newpredict
+```
+
+This prediction fits the data well since it is near the 3rd quartile of the crime distribution.  See boxplot below.  Note that this point prediction lower than the prediction from our selected model from HW 5 since 1304 is further away from the 3rd quartile than the 1113 we got from the PCA regression model.  We can increase the number of PCs to include to get closer to 1304 since it corresponds to a model that had the better fit in HW5.
+
+```{r}
+boxplot(crime$Crime)
+min(crime$Crime)
+max(crime$Crime)
+quantile(crime$Crime, c(0.5,0.75,0.8))
+```
+
+Try to get a better fit by including the fifth and sixth PCs
+
+```{r}
+
+score2<-crimepca$x[,1:6] #score = X %*% V scaled data times eigenvectors
+
+pcacrime2<-data.frame(score2, Crime=crime$Crime)
+
+lm2<-lm(Crime~., pcacrime2)
+summary(lm2)
+
+```
+
+check out cross-validated metrics
+```{r}
+set.seed(42)
+lm2.cv<-cv.lm(pcacrime2,lm2,m=4)#four-fold cross-validation 
+#lm1.cv$cvpred extracts the cross-validated predictions for all 47 data points!!!!
+
+#mean squared error across all folds = 71387  which is less than 123084 from lm1
+
+
+avgRMSE<-sqrt(attr(lm2.cv,"ms"))#a performance measure for regression
+avgRMSE #267 instead of 351 from lm1
+
+#Calculate cv adjusted R^2
+SST<-sum((lm2.cv$Crime-mean(lm2.cv$Crime))^2)
+SSE<-sum((lm2.cv$Crime-lm2.cv$cvpred)^2)
+
+R2<-1-(SSE/SST) #R^2
+n<-nrow(crime)
+k<-6
+R2
+n
+k
+
+1-(1-R2)*(n-1)/(n-k-1)
+
+AIC(lm2)# now 658 and was 687 from lm1
+```
+Adding 2 extra principal components greatly increased the adjusted R^2 from 0.08 to 0.439 since we are increasing the variance explained by our principal components from 80% to 90% with the new inclusion.
+
+Build the model with PCA reconstructed data and get the coefficients
+```{r}
+
+aprime2<-crimepca$rotation[,1:6] %*% summary(lm2)$coef[-1,1]#doing matrix multiplication to get back original variables
+#a<-aprime * crimepca$scale + crimepca$center
+
+a02<-summary(lm2)$coef[1] - sum(aprime2 * (crimepca$center/crimepca$scale))
+aj2<-aprime2 / crimepca$scale
+
+a02
+aj2
+```
+notice here that the intercept term has not changed.
+
+predict new city using coefficients there are two ways of doing this so I am just running both to see if I get the same result
+```{r}
+newcrime<-data.frame(M=14, So=0, Ed=10.0, Po1=12.0, Po2=15.5, LF=0.640, M.F=94.0, Pop=150, NW=1.1, U1=0.12, U2=3.6, Wealth=3200, Ineq=20.1, Prob=0.04, Time=39.0)
+str(newcrime)
+
+a3<-rbind(summary(lm2)$coef[1],aprime2)#new coefficients of the model w/ intercept
+a3
+newpredict2<-as.matrix(scale(newcrime,center = crimepca$center, scale = (crimepca$scale))) %*% a3[-1,] + a3[1]
+newpredict2
+
+newpredict2<-as.matrix(newcrime) %*% aj2 + a02
+newpredict2
+```
+Our point prediction of the new model has increased from 1113 to 1248 after including 2 more principal components and we are a bit closer to our best model prediction from HW 5 of 1304.  Let's add 2 more PCs and see where our prediction lands compared to last homework assignment's 1304 prediction.
+
+
+Try to get a better fit by including the seventh and eighth PCs
+
+```{r}
+
+score3<-crimepca$x[,1:8] #score = X %*% V scaled data times eigenvectors
+
+pcacrime3<-data.frame(score3, Crime=crime$Crime)
+
+lm3<-lm(Crime~., pcacrime3)
+summary(lm3)
+
+```
+
+check out cross-validated metrics
+```{r}
+set.seed(42)
+lm3.cv<-cv.lm(pcacrime3,lm3,m=4)#four-fold cross-validation 
+#lm1.cv$cvpred extracts the cross-validated predictions for all 47 data points!!!!
+
+#mean squared error across all folds = 68837  which is less than 71387 from lm1
+
+
+avgRMSE<-sqrt(attr(lm3.cv,"ms"))#a performance measure for regression
+avgRMSE #262 instead of 267 from lm2
+
+#Calculate cv adjusted R^2
+SST<-sum((lm3.cv$Crime-mean(lm3.cv$Crime))^2)
+SSE<-sum((lm3.cv$Crime-lm3.cv$cvpred)^2)
+
+R2<-1-(SSE/SST) #R^2
+n<-nrow(crime)
+k<-8
+R2
+n
+k
+
+1-(1-R2)*(n-1)/(n-k-1)
+
+AIC(lm3)# now 657 and was 658 from lm2
+```
+
+Adding 2 extra principal components decreased the adjusted R^2 from 0.439 to 0.431 eventhough we are increasing the variance explained by our principal components from 90% to 95% with the new inclusion.  We could be overfitting to random noise now.
+
+Build the model with PCA reconstructed data and get the coefficients
+```{r}
+
+aprime3<-crimepca$rotation[,1:8] %*% summary(lm3)$coef[-1,1]#doing matrix multiplication to get back original variables
+#a<-aprime * crimepca$scale + crimepca$center
+
+a03<-summary(lm3)$coef[1] - sum(aprime3 * (crimepca$center/crimepca$scale))
+aj3<-aprime3 / crimepca$scale
+
+a03
+aj3
+```
+reverted coefficients for model lm3.
+
+predict new city using coefficients
+```{r}
+newcrime<-data.frame(M=14, So=0, Ed=10.0, Po1=12.0, Po2=15.5, LF=0.640, M.F=94.0, Pop=150, NW=1.1, U1=0.12, U2=3.6, Wealth=3200, Ineq=20.1, Prob=0.04, Time=39.0)
+str(newcrime)
+
+a4<-rbind(summary(lm3)$coef[1],aprime3)#new coefficients of the model w/ intercept
+a4
+
+newpredict3<-as.matrix(scale(newcrime,center = crimepca$center, scale = (crimepca$scale))) %*% a4[-1,] + a4[1]
+newpredict3
+
+newpredict3<-as.matrix(newcrime) %*% aj3 + a03
+newpredict3
+```
+
+Now the point prediction has dropped from 1248 to 1190 since we are starting to overfit.  It is better to use the model with 6 Pcs instead which gave a point prediction of 1248.
