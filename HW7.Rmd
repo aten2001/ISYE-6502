@@ -1,7 +1,7 @@
 ---
 title: "ISYE 6501 Homework 7"
 author: "Mitchell Matsuura"
-date: "February 23, 2019"
+date: "February 27, 2019"
 output:
  word_document: default
 pdf_document: default
@@ -46,7 +46,7 @@ crimetree
 ```
 We see that Po1 is the most important variable and therefore used as the first split
 
-calculate R^2 for the tree model
+calculate R^2 and adjusted R^2 for the tree model
 ```{r}
 SST<-sum((crime$Crime-mean(crime$Crime))^2)
 SSE<-sum((crime$Crime-predict(crimetree,newdata=crime))^2)
@@ -54,6 +54,10 @@ SST
 SSE
 r2<-1-SSE/SST
 r2
+n=nrow(crime)
+k=7#number of terminal nodes
+adjR2<-1-(1-r2)*(n-1)/(n-k-1)
+adjR2
 ```
 
 
@@ -89,10 +93,16 @@ in-sample residual mean deviance is now 97410 which is twice as high as it was w
 Calculate R^2 for the pruned model
 ```{r}
 SSE2<-sum((crime$Crime-predict(crimetree2,newdata=crime))^2)
+SSE2
 r2<-1-SSE2/SST
 r2
+n=nrow(crime)
+k=2#number of terminal nodes
+adjR2<-1-(1-r2)*(n-1)/(n-k-1)
+adjR2
+
 ```
-insample R^2 has dropped significantly.  However we are expecting cross validated R^2 to be less than the full model.
+insample adjusted R^2 has dropped significantly.  However we are expecting cross validated R^2 to be less than the full model.
 
 use the randomForest package to build a randomForest model using first the recommended number of variables to split on mtry = sqrt(number of predictors) or 1+log(number of predictors) so sqrt(15).  Try mtry =4
 
@@ -101,6 +111,7 @@ library(randomForest)
 rm<-randomForest(Crime~., data=crime, mtry=4)
 rm
 ```
+we see here that rquared is 41.58% which is higher than our selected tree model r quared of 0.3629626.
 
 Find the importance of the predictors using the Importance function and VarImpPlot
 ```{r}
@@ -120,9 +131,49 @@ cvrm
 
 SSErm<-sum((cvrm$pred[,2]-cvrm$pred[,1])^2)
 SSErm
+SSTrm<-sum((cvrm$pred[,2]-mean(cvrm$pred[,2]))^2)
+SSTrm
+r2<-1-(SSErm/SSTrm)
+r2
 ```
 
-The mtry level that corresponds to the highest cross validated R^2 is 4 just as we hypothsized.  It appears that the random forest model has outperformed the single decision tree since sum of squared residuals = 51997742 instead of 6606355 from the pruned tree model.
+The mtry level that corresponds to the highest cross validated R^2 is 4 just as we hypothsized.  It appears that the random forest model has outperformed the single decision tree  pruned tree model.  Cross validated r squared is 0.4435946.  this result is not suprising because we are creating many tree to explain the data.
+
+try lowering the number of trees built from 500 to 400 and compare cross validated performance perhaps we can prevent overfit
+
+```{r}
+set.seed(478)
+cvrm2<-train(Crime~., data=crime,
+            trControl=trainControl(method = 'cv', number = 5, savePredictions = TRUE),
+            tuneGrid=expand.grid(mtry=1:15), ntree=400)
+cvrm2
+
+SSErm<-sum((cvrm2$pred[,2]-cvrm2$pred[,1])^2)
+SSErm
+SSTrm<-sum((cvrm2$pred[,2]-mean(cvrm2$pred[,2]))^2)
+SSTrm
+r2<-1-(SSErm/SSTrm)
+r2
+```
+we see some small improvement in cross validated performance by limiting the number of trees grown to 400 since RMSE is 274.4710, rsquared is 0.5598780, and MAE is 207.2849 and was 274.9785  0.5587052  207.2962.
+
+try lowering the number of trees built from 400 to 300 and compare cross validated performance perhaps we can still prevent overfit
+
+```{r}
+set.seed(478)
+cvrm3<-train(Crime~., data=crime,
+            trControl=trainControl(method = 'cv', number = 5, savePredictions = TRUE),
+            tuneGrid=expand.grid(mtry=1:15), ntree=300)
+cvrm3
+
+SSErm<-sum((cvrm3$pred[,2]-cvrm3$pred[,1])^2)
+SSErm
+SSTrm<-sum((cvrm3$pred[,2]-mean(cvrm3$pred[,2]))^2)
+SSTrm
+r2<-1-(SSErm/SSTrm)
+r2
+```
+no improvement so use the previous model cvrm2 instead with 400 trees constructed.
 
 ###Question 10.2
 Logistic regression is typically the model of choice for predicting the probability a bodily injury claim will increase in cost more than an expected amount say by 50,000.  The earlier a logit model could correctly predict a high cost claim probability, the quicker the claims department could allocate the appropriate claims resources to adjucate the claim.  This will hopefully increase efficiency and improve claim results and profitability.
@@ -135,7 +186,7 @@ Predictors
 5) age of the claimant 
 
 
-###Question 10.3
+###Question 10.3.1
 read in text file from class website and examine data
 ```{r}
 credit<-read.table("https://prod-edxapp.edx-cdn.org/assets/courseware/v1/6b94c2e35480e671545e52a808a8a549/asset-v1:GTx+ISYE6501x+1T2019+type@asset+block/germancredit.txt",header = FALSE)
@@ -226,26 +277,42 @@ glm2<-update(glm1,.~.-V20-V19-V18-V17-V15-V13-V12-V11-V10-V7-V5)
 summary(glm2)
 
 ```
-We now have a new model with selected terms.  AIC has improved for the model since it decreased from 690.94 to 675.53.
+We now have a new model with selected terms.  AIC has improved for the model since it decreased from 690.94 to 675.53.  The 4th variable has a really strange coefficient estimate for A48 and very high p-values for both A44 and A48.  Need to explore this more and decide whether to combine these levels with another level.
 
-Show the cross validated performance of the model we trained
 ```{r}
-build$V21<-ifelse(build$V21==1,'bad','good')
-buildfolds<-createFolds(build$V21,k=10)
+View(build$V4)
+```
+After viewing variable 4 which is a categorical variable for the Purpose of the loan I found there is only 4 observations for A48 factor level which stands for the loan purpose of retraining.  This purpose has such a low number of observations in the build set and is causing unstability in its estimation so I'll combine A48 with the base level A40 (car new) and rerun the model.  Factor A44 has twice as many observation in the build set but at 8 that number is still low, so I will also combine this level with the base to zero out the coefficient.  See if AIC improves.
+
+```{r}
+levels(build$V4)[levels(build$V4)==c("A48","A44")]<-"A40"
+glm2.5<-update(glm2,.~.)
+summary(glm2.5)
+```
+AIC actually increased from 675.53 to 680.01 but this is an in-sample and not a cross validated result.  I still believe that we improved the stability of the model by relabelling the variable.
+
+Show the cross validated performance of the model we trained.  Using 7 folds so we have 100 obs in each fold
+```{r}
+build$risk<-as.factor(ifelse(build$V21==1,'bad','good'))
+buildfolds<-createFolds(build$risk,k=7)
 
 set.seed(478)
-cvrm<-train(V21 ~ V1 + V2 + V3 + V4 + V6 + V8 + V9 + V14 + V16,
+cvrm<-train(risk ~ V1 + V2 + V3 + V4 + V6 + V8 + V9 + V14 + V16,
             data=build,
             method='glm',
-            family = binomial(link='logit'),
-            trControl=trainControl(method = 'cv', number = 10, index = buildfolds, classProbs = TRUE, summaryFunction = twoClassSummary),
+            trControl=trainControl(method = 'cv', number = 7, index = buildfolds, classProbs = TRUE, summaryFunction = twoClassSummary),
     metric='ROC')
 cvrm
-
+cvrm$finalModel
 ```
-Make prediction on the test set
+Here is the 7-fold cross validated area under the curve=0.6922543, sensitivity=0.4880952 and specificity= 0.7901361 assuming a 50% threshold and '1' is the positive class.  Caret found some predictions were equal to 0 or 1 when the output is probability which happens with logit regression.
+
+Let's see how this performance changes on the test set for the 50% threshold.
+
+Make prediction on the test set after first relabelling V4A48 and V4A44 to V4A40 as we did in the build set
 ```{r}
-glm2test<-exp(predict(glm2, newdata=test))
+levels(test$V4)[levels(test$V4)==c("A48","A44")]<-"A40"
+glm2test<-exp(predict(glm2.5, newdata=test))
 
 
 #set threshold at 50% 
@@ -256,8 +323,11 @@ confusionMatrix(glm2testfact,as.factor(test$V21))#using 50% threshold
 
 
 ```
-Here we see the model predicted on 26% of the bad risks correctly and misclassified 38 out of 90 (42%) bad risks as good which incurs a heavy cost for the bank.  55 good risks were classified as bad but this incurred less additional cost for the bank since these risks were good anyway.
+Here we see the model predicted on 59% of the bad risks correctly and misclassified 37 out of 90 (41%) bad risks as good which incurs a heavy cost for the bank.  53 good risks were classified as bad but this incurred less additional cost for the bank since these risks were good anyway.
 
+The test set sensitivity for positive class '1' is higher in the test set than from cross validation on the build set since 0.5889 is greater than 0.4880952.  Also test set specificity for negative class '0' is lower than from cross validation since 0.7476 is lower than 0.7901361.  This is a good result still since there is a greater cost for misclassifying the positive class as the negative class.
+
+###Question 10.3.2
 Let's try other thresholds and apply our cost function to evaluate model performance
 
 
@@ -266,7 +336,7 @@ Set up costs
   
     mycost=function(r,pi,threshold){#bad risks
     
-    ifelse(r==1,ifelse(pi<threshold,5,0), #misclassifying bad risk incurrs a cost of 5 per risk
+    ifelse(r==1,ifelse(pi<threshold,5,0), #misclassifying bad risk incurs a cost of 5 per risk
 
           ifelse(pi>threshold#misclass good risk incurrs a cost of 1 per risk
       ,1,0))
@@ -277,7 +347,7 @@ Set up costs
 cost= sum(mycost(test$V21,glm2test,threshold))
 print(cbind(threshold,cost))}
 ```
-  the lowest cost is 181 and it corresponds to a threshold of 0.19.
+  the lowest cost is 172 and it corresponds to a threshold of 0.19.
   
   Lets see the confusion matrix at threshold 0.19
 ```{r}
@@ -286,4 +356,6 @@ glm2testfact2<-as.factor(ifelse(glm2test>0.19,1,0))#positive class is bad risks
 
 confusionMatrix(glm2testfact2,as.factor(test$V21))#using 19% threshold 
 ```
-  Here we see that lowering the threshold has lowered the number of false negative from 38 to only 16 which lowers our cost greatly by 110.  At the sametime we now have more false positive due to lowering the positive class threshold.  False positives increase from 55 to 101 for an extra cost of 46.  Net our cost position lowers from 245 to 181 due to this change.
+  Here we see that lowering the threshold has lowered the number of false negative from 38 to only 15 which lowers our cost greatly by 115.  At the sametime we now have more false positive due to lowering the positive class threshold.  False positives increase from 53 to 97 for an extra cost of 44.  Our total cost position lowers from 238 to 172 due to this change.
+  
+  Final note, overall accuracy is not the metric to optimize directly due to the class imbalance (70% and 30%) and the cost structure of 5:1 for misclassification.  Notice that overall accuracy dropped from 0.7 to 0.6267 here.
