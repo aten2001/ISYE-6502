@@ -320,12 +320,12 @@ glm2testfact<-as.factor(ifelse(glm2test>0.5,1,0))#positive class is bad risks
 
 confusionMatrix(glm2testfact,as.factor(test$V21))#using 50% threshold 
 
-
-
+library(pROC)
+roc(test$V21,ifelse(glm2test>0.5,1,0))#inputs must be numeric
 ```
 Here we see the model predicted on 59% of the bad risks correctly and misclassified 37 out of 90 (41%) bad risks as good which incurs a heavy cost for the bank.  53 good risks were classified as bad but this incurred less additional cost for the bank since these risks were good anyway.
 
-The test set sensitivity for positive class '1' is higher in the test set than from cross validation on the build set since 0.5889 is greater than 0.4880952.  Also test set specificity for negative class '0' is lower than from cross validation since 0.7476 is lower than 0.7901361.  This is a good result still since there is a greater cost for misclassifying the positive class as the negative class.
+The test set sensitivity for positive class '1' is higher in the test set than from cross validation on the build set since 0.5889 is greater than 0.4880952.  Also test set specificity for negative class '0' is lower than from cross validation since 0.7476 is lower than 0.7901361.  This is a good result still since there is a greater cost for misclassifying the positive class as the negative class.  Test set area under the curve is less than our cross validated AUC of 0.69.
 
 ###Question 10.3.2
 Let's try other thresholds and apply our cost function to evaluate model performance
@@ -355,7 +355,10 @@ print(cbind(threshold,cost))}
 glm2testfact2<-as.factor(ifelse(glm2test>0.19,1,0))#positive class is bad risks
 
 confusionMatrix(glm2testfact2,as.factor(test$V21))#using 19% threshold 
+roc(test$V21,ifelse(glm2test>0.19,1,0))#inputs must be numeric
 ```
   Here we see that lowering the threshold has lowered the number of false negative from 38 to only 15 which lowers our cost greatly by 115.  At the sametime we now have more false positive due to lowering the positive class threshold.  False positives increase from 53 to 97 for an extra cost of 44.  Our total cost position lowers from 238 to 172 due to this change.
+  
+  Test set area under the curve increased from 0.6683 to 0.6857 since we are able to predict more true positives.
   
   Final note, overall accuracy is not the metric to optimize directly due to the class imbalance (70% and 30%) and the cost structure of 5:1 for misclassification.  Notice that overall accuracy dropped from 0.7 to 0.6267 here.
