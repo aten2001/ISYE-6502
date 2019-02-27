@@ -1,0 +1,275 @@
+---
+title: "ISYE 6501 Homework 7"
+author: "Mitchell Matsuura"
+date: "February 23, 2019"
+output:
+ word_document: default
+pdf_document: default
+html_document: default
+---
+  
+
+###Question 10.1
+read in text file from class website and examine data
+```{r}
+crime<-read.table("https://prod-edxapp.edx-cdn.org/assets/courseware/v1/17b85cea5d0e613bf08025ca2907b62f/asset-v1:GTx+ISYE6501x+1T2019+type@asset+block/uscrime.txt",header = TRUE)
+str(crime)
+summary(crime)
+View(crime)
+```
+It appears the data has a varying scale on one hand of the extreme some variables are in the hundreth decimal place and on the other extreme we have variables in the thousands including our response variable.
+
+No missing data though.  Outliers possibly in POP (top), NW (bottom), Prob (bottom), and Crime (top 2)
+
+Load in library tree, perform tree regression and use cross validation to find the optimal size of tree
+```{r}
+library(tree)
+crimetree<-tree(Crime~.,data=crime)
+
+```
+
+
+  Let's examine the tree we built first
+
+```{r}
+summary(crimetree)
+
+```
+we see that there are actually 7 terminal nodes with Residual mean deviance of 47390
+
+Let's plot the tree to study the interactions and if the splits make sense
+```{r}
+plot(crimetree)
+text(crimetree ,pretty =0)
+crimetree
+
+```
+We see that Po1 is the most important variable and therefore used as the first split
+
+calculate R^2 for the tree model
+```{r}
+SST<-sum((crime$Crime-mean(crime$Crime))^2)
+SSE<-sum((crime$Crime-predict(crimetree,newdata=crime))^2)
+SST
+SSE
+r2<-1-SSE/SST
+r2
+```
+
+
+let's see if we can build a better tree.  One that has less sum of squared residuals
+```{r}
+sample(1:1000,1)#478
+set.seed(478)
+cvs<-cv.tree(crimetree, FUN = prune.tree, K=5)
+cvs
+plot(cvs$size ,cvs$dev ,type="b")
+```
+
+5 fold cross validation indicates that optimal size is 2 since dev of 6606355 is the lowest error.
+
+Now that we know the optimal terminal nodes with all the data is actually only 2 apply this limit to tree.contol option if tree is bigger than 2 terminal nodes to prevent overfit.
+
+We see that we can make the recommended pruned tree by requiring the minimum number of observation to be 23 at each node.  Try rebuilding the tree with mincut =23 which will give us 2 terminal nodes.
+
+```{r}
+crimetree2<-tree(Crime~.,data=crime, control = tree.control(nobs = 47, mincut = 23))
+crimetree2
+plot(crimetree2)
+text(crimetree2 ,pretty =0)
+```
+we see that this give the treee with 2 terminal nodes or leaves.
+
+in-sample performance of the pruned tree
+```{r}
+summary(crimetree2)
+```
+in-sample residual mean deviance is now 97410 which is twice as high as it was with all 7 leaves which makes sense since we now have a much simpler model that is not able to explain the training data as well so residual deviance is higher.
+
+Calculate R^2 for the pruned model
+```{r}
+SSE2<-sum((crime$Crime-predict(crimetree2,newdata=crime))^2)
+r2<-1-SSE2/SST
+r2
+```
+insample R^2 has dropped significantly.  However we are expecting cross validated R^2 to be less than the full model.
+
+use the randomForest package to build a randomForest model using first the recommended number of variables to split on mtry = sqrt(number of predictors) or 1+log(number of predictors) so sqrt(15).  Try mtry =4
+
+```{r}
+library(randomForest)
+rm<-randomForest(Crime~., data=crime, mtry=4)
+rm
+```
+
+Find the importance of the predictors using the Importance function and VarImpPlot
+```{r}
+importance(rm)
+varImpPlot(rm)
+```
+Increase in node purity for Random Forest regression is just the increase in RSS averaged over all trees that occurs from splitting over that variable.  Again we see that Po1 is the most important variable.
+
+USe cross validation to see if we can improve the model with different mtry levels
+```{r}
+library(caret)
+set.seed(478)
+cvrm<-train(Crime~., data=crime,
+            trControl=trainControl(method = 'cv', number = 5, savePredictions = TRUE),
+            tuneGrid=expand.grid(mtry=1:15))
+cvrm
+
+SSErm<-sum((cvrm$pred[,2]-cvrm$pred[,1])^2)
+SSErm
+```
+
+The mtry level that corresponds to the highest cross validated R^2 is 4 just as we hypothsized.  It appears that the random forest model has outperformed the single decision tree since sum of squared residuals = 51997742 instead of 6606355 from the pruned tree model.
+
+###Question 10.2
+Logistic regression is typically the model of choice for predicting the probability a bodily injury claim will increase in cost more than an expected amount say by 50,000.  The earlier a logit model could correctly predict a high cost claim probability, the quicker the claims department could allocate the appropriate claims resources to adjucate the claim.  This will hopefully increase efficiency and improve claim results and profitability.
+
+Predictors
+1) type of body part injured (head, shoulder, knee, hand, finger)
+2) nature of the injury (sprain, strain, laceration, concussion, contusion)
+3) cause of the accident (motor vehicle accident, fall, hit by an object)
+4) prior medical conditions (diabetes, obesity, heart disease)
+5) age of the claimant 
+
+
+###Question 10.3
+read in text file from class website and examine data
+```{r}
+credit<-read.table("https://prod-edxapp.edx-cdn.org/assets/courseware/v1/6b94c2e35480e671545e52a808a8a549/asset-v1:GTx+ISYE6501x+1T2019+type@asset+block/germancredit.txt",header = FALSE)
+str(credit)
+summary(credit)
+View(credit)
+```
+One of the variables V5 (credit amount) is on a much different scale than the rest of the variables.  Fortunately we are using regression so scale is not going to throw off the model.  No N/As in data.
+
+Relabel the response variable as 0 and 1.  Set 1 to 0 for 'Good' and  2 to 1 for 'Bad'
+bad is the positive class
+```{r}
+credit$V21<-ifelse(credit$V21==1,0,ifelse(credit$V21==2,1,credit$V21))
+summary(credit$V21)
+```
+
+check on the proportion of good and bad
+```{r}
+prop.table(table(credit$V21))
+```
+shows 70% are good credit risks and 30% are bad.
+
+split the data into 70% building,30% test which is roughly 700 obs in training.
+Make sure splits are stratified by response variable proportions and we randomize the data first
+```{r}
+head(credit)
+set.seed(1)
+credit2<-credit[sample(1:nrow(credit)),]
+head(credit2)
+```
+data set rows are now randomized
+
+Create a building set
+```{r}
+credit2$V21<-as.factor(credit2$V21)
+sample(1:nrow(credit2),1)
+set.seed(266)
+buildIndex <- createDataPartition(credit2$V21, p = .7, list=FALSE, times = 1)
+build<-credit2[buildIndex,]
+str(build)#confirm number of records is 70% of entire data set
+```
+Check to see if the proportion of 0s and 1s in the training set match our earlier check on the entire data set
+```{r}
+prop.table(table(build$V21))
+```
+
+success we have a stratified partition of the data for the buildset
+
+Create a validation set from the remaining data
+```{r}
+test<-credit2[-buildIndex,]
+str(test)#confirm number of records is 50% of test and validation data
+```
+
+Check to see if the proportion of 0s and 1s in the test set match our earlier check on the entire data set
+```{r}
+prop.table(table(test$V21))
+```
+
+does match 70-30% proportions
+
+do glm with all features on build set
+```{r}
+glm1<-glm(V21~., data=build, family = binomial(link='logit'))
+summary(glm1)
+anova(glm1, test="Chi")#type I test
+```
+Here we identify insignificant variables based on the level or variables p-value >0.05 for the type I anova test.  We see we can drop  V20, V19, V18, V17, V15, V13, V12, V11, V10, V7, V5 since those terms had p-values greater than 0.05.
+
+Check for multicolinearity
+```{r}
+library(car)
+vif(glm1)
+alias(glm1)
+```
+Variables V2 and V5 have slightly elevated levels of variable inflation factors.  There could be a positive relationship between duration of the loan and credit amount since bigger loans have larger loan durations.  Use scatter plot to explore the extent
+
+```{r}
+library(GGally)
+ggpairs(credit, columns = c('V2', 'V5'), mapping=ggplot2::aes(color= '#3366FF'))
+```
+confirms correlation is positive.  The anova test revealed we could drop V5 so we'll just retain V2.
+
+Rerun the model without the insignificant predictors identified since 
+Remove predictors  V20, V19, V18, V17, V15, V13, V12, V11, V10, V7, V5 from the model and rerun
+```{r}
+glm2<-update(glm1,.~.-V20-V19-V18-V17-V15-V13-V12-V11-V10-V7-V5)
+summary(glm2)
+
+```
+We now have a new model with selected terms.  AIC has improved for the model since it decreased from 690.94 to 675.53.
+
+
+Make prediction on the test set
+```{r}
+glm2test<-exp(predict(glm2, newdata=test))
+
+
+#set threshold at 50% 
+glm2testfact<-as.factor(ifelse(glm2test>0.5,1,0))#positive class is bad risks
+
+confusionMatrix(glm2testfact,as.factor(test$V21))#using 50% threshold 
+
+
+
+```
+Here we see the model predicted on 26% of the bad risks correctly and misclassified 52 out of 90 (58%) bad risks as good which incurs a heavy cost for the bank.  155 good risks were classified as bad but this does not incur additional cost for the bank.
+
+Let's try other thresholds and apply our cost function to evaluate model performance
+
+
+Set up costs
+```{r}
+  
+    mycost=function(r,pi,threshold){#bad risks
+    
+    ifelse(r==1,ifelse(pi<threshold,5,0), #misclassifying bad risk incurrs a cost of 5 per risk
+
+          ifelse(pi>threshold#misclass good risk incurrs a cost of 1 per risk
+      ,1,0))
+    }
+
+
+  for(threshold in (1:100)/100){
+cost= sum(mycost(test$V21,glm2test,threshold))
+print(cbind(threshold,cost))}
+```
+  the lowest cost is 181 and it corresponds to a threshold of 0.19.
+  
+  Lets see the confusion matrix at threshold 0.19
+```{r}
+  #set threshold at 19% 
+glm2testfact2<-as.factor(ifelse(glm2test>0.19,1,0))#positive class is bad risks
+
+confusionMatrix(glm2testfact2,as.factor(test$V21))#using 19% threshold 
+```
+  Here we see that lowering the threshold has lowered the number of false negative from 38 to only 16 which lowers our cost greatly by 110.  At the sametime we now have more false positive due to lowering the positive class threshold.  False positives increase from 55 to 101 for an extra cost of 46.  Net our cost position lowers from 245 to 181 due to this change.
