@@ -228,7 +228,21 @@ summary(glm2)
 ```
 We now have a new model with selected terms.  AIC has improved for the model since it decreased from 690.94 to 675.53.
 
+Show the cross validated performance of the model we trained
+```{r}
+build$V21<-ifelse(build$V21==1,'bad','good')
+buildfolds<-createFolds(build$V21,k=10)
 
+set.seed(478)
+cvrm<-train(V21 ~ V1 + V2 + V3 + V4 + V6 + V8 + V9 + V14 + V16,
+            data=build,
+            method='glm',
+            family = binomial(link='logit'),
+            trControl=trainControl(method = 'cv', number = 10, index = buildfolds, classProbs = TRUE, summaryFunction = twoClassSummary),
+    metric='ROC')
+cvrm
+
+```
 Make prediction on the test set
 ```{r}
 glm2test<-exp(predict(glm2, newdata=test))
@@ -242,7 +256,7 @@ confusionMatrix(glm2testfact,as.factor(test$V21))#using 50% threshold
 
 
 ```
-Here we see the model predicted on 26% of the bad risks correctly and misclassified 52 out of 90 (58%) bad risks as good which incurs a heavy cost for the bank.  155 good risks were classified as bad but this does not incur additional cost for the bank.
+Here we see the model predicted on 26% of the bad risks correctly and misclassified 38 out of 90 (42%) bad risks as good which incurs a heavy cost for the bank.  55 good risks were classified as bad but this incurred less additional cost for the bank since these risks were good anyway.
 
 Let's try other thresholds and apply our cost function to evaluate model performance
 
