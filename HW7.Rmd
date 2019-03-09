@@ -312,7 +312,7 @@ Let's see how this performance changes on the test set for the 50% threshold.
 Make prediction on the test set after first relabelling V4A48 and V4A44 to V4A40 as we did in the build set
 ```{r}
 levels(test$V4)[levels(test$V4)==c("A48","A44")]<-"A40"
-glm2test<-exp(predict(glm2.5, newdata=test))
+glm2test<-predict(glm2.5, newdata=test,type='response')
 
 
 #set threshold at 50% 
