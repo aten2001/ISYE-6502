@@ -1,0 +1,72 @@
+---
+title: "ISYE 6501 Homework 10"
+author: "Mitchell Matsuura"
+date: "March 25, 2019"
+output:
+ word_document: default
+pdf_document: default
+html_document: default
+---
+  
+
+###Question 14.1.1
+Load in data, do mean, mode and median imputation
+```{r}
+cancer<-read.csv("http://archive.ics.uci.edu/ml/machine-learning-databases/breast-cancer-wisconsin/breast-cancer-wisconsin.data",header = FALSE,stringsAsFactors = FALSE)
+str(cancer)
+summary(cancer)
+View(cancer)
+table(cancer$V7)
+```
+After loading in the data we see that the variable V7 for bare nuclei has 16 observations with missing data labeled as "?".  Observations for this attribute should vary from integers 1-10.
+
+create an index of the missing values and replace '? with 0
+```{r}
+missing<-which(cancer$V7=='?')
+missing
+
+```
+index creation is successful since 16 row indicies are returned after calling missing
+
+What % of the data has missing values?  Is it below 5%
+```{r}
+length(missing)/nrow(cancer)
+```
+missing values are only a small portion of the data, less than 5%.  So imputation is a reasonable approach to handling missing data.
+
+Is missing data random?  Use prop.table to figure out
+```{r}
+
+prop.table(table(cancer$V11))
+
+prop.table(table(cancer[-missing,11]))
+
+prop.table(table(cancer[missing,11]))
+
+```
+it apprears that the missing data rows have a different proportion of the response classes than the nonmissing rows. Class 2 is more likely. However we are only missing 16 observations out of 699 so without insider knowledge of the data recording process, we'll just keep this in mind for now.
+
+set V7 to numeric/integer calculate mean, mode, median of nonmissing V7.  Round mean to nearest integer
+```{r}
+as.integer(cancer$V7)
+mean<-round(mean(as.integer(cancer[-missing,7]),na.rm = TRUE), digits = 0)
+mean
+median<-median(cancer$V7)
+median
+mode<-as.numeric(names(table(cancer[-missing,7]))[which.max(table(cancer[-missing,7]))])
+mode
+hist(as.integer(cancer[-missing,7]))
+```
+mean was rounded to 4.  Median and mode are both equal to 1 since most of our observations are 1.  This is a nice 2 for 1 in our analysis but we'll have to keep in mind the distribution is actually bimodal with 2nd mode at 10, modes are at both ends of the distribution.
+
+replace missing with mean and mode
+```{r}
+meanimpute<-cancer[missing,7]<-mean
+modeimpute<-cancer[missing,7]<-mode
+meanimpute
+modeimpute
+```
+
+
+
+
