@@ -59,14 +59,95 @@ hist(as.integer(cancer[-missing,7]))
 ```
 mean was rounded to 4.  Median and mode are both equal to 1 since most of our observations are 1.  This is a nice 2 for 1 in our analysis but we'll have to keep in mind the distribution is actually bimodal with 2nd mode at 10, modes are at both ends of the distribution.
 
-replace missing with mean and mode
+replace missing with mean and 
 ```{r}
-meanimpute<-cancer[missing,7]<-mean
-modeimpute<-cancer[missing,7]<-mode
-meanimpute
-modeimpute
+cancer[missing,7]=mean
+cancer[missing,7]
+
+table(cancer$V7)
+
+as.integer(cancer$V7)
+cancer$V11<-as.factor(ifelse(cancer$V11==2,0,1))
 ```
 
+split the data into build/validate and test with 75% into build/validate and 30% test
+```{r}
+library(caret)
 
+trainIndex <- createDataPartition(cancer$V11, p = .75, list=FALSE, times = 1)
+train<-cancer[trainIndex,]
+prop.table(table(train$V11))
+
+
+cvfolds<-createMultiFolds(train$V11, k=10, times = 5)
+control<-trainControl(method = "repeatedcv", number = 10, repeats = 5, 
+												 index = cvfolds)
+svmgrid<-expand.grid(C=2^c(-6,-5,-4,-3,-2,-1,0,1,2,3,4,5,6,7),sigma=10^-(1:4))
+```
+
+build a KNN model with mean imputation
+```{r}
+set.seed(253)
+svmmean<-train(V11~.,
+							data = train, 
+							method='svmRadial',
+							#preProc=c("center","scale"),
+							tuneGrid=svmgrid,
+							verbose = FALSE,
+							trControl=control)
+svmmean
+
+set.seed(253)
+svmmean2<-train(V11~.,
+							data = train, 
+							method='svmRadial',
+							#preProc=c("center","scale"),
+							tuneGrid=svmgrid,
+							verbose = FALSE,
+							trControl=control,
+							metric='Kappa')
+svmmean2
+```
+See if there is a different result if I pick the best model using Kappa metric.  Kappa is a preferred metric for class imbalance.  This data set has a slight imbalance in 0 is twice as likely as 1.  Changing the metric didn't matter since best model is still sigma of 0.01 and C of 1.
+
+Get the confusion matrix on the build set
+```{r}
+confusionMatrix(predict(svmmean2,newdata=train),train$V11)
+
+```
+this is good indication on the build set since we are missclassfying only 5 malignant tumors and 10 benign tumors.
+
+perform mode imputation
+```{r}
+cancer[missing,7]=mode
+cancer[missing,7]
+table(cancer$V7)
+
+as.integer(cancer$V7)
+
+train<-cancer[trainIndex,]
+```
+
+rerun svmmean2 with mode imputed data and Kappa Metric
+```{r}
+set.seed(253)
+svmmode<-train(V11~.,
+							data = train, 
+							method='svmRadial',
+							#preProc=c("center","scale"),
+							tuneGrid=svmgrid,
+							verbose = FALSE,
+							trControl=control,
+							metric='Kappa')
+svmmode
+```
+cross validation selected the same optimal parameter for the svm model with mode imputed missing values of sigma = 0.01  and C=1.  Crossvalidated Kappa is only very slightly lower than mode impuation maybe due to the fact the response distribution is bimodal.  Let's see the confusion matrix on the build set
+
+Get the confusion matrix on the build set
+```{r}
+confusionMatrix(predict(svmmode,newdata=train),train$V11)
+
+```
+no change on the build set confusion matrix since we misclassify 5 malignant and 10 benign like before.  However, I would pay close attention to differences on the test set performance.
 
 
